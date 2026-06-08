@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+
+# Блокировка служебных путей Vercel
+Disallow: /_next/
+Disallow: /_vercel/
+Disallow: /api/
+
+# Указание пути к карте сайта
+Sitemap: https://vercel.app
