@@ -233,7 +233,6 @@
             font-family: monospace; z-index: 100;
         }
 
-        /* ✅ ИСПРАВЛЕНИЕ: Высокий z-index для всех кнопок */
         #resetDroneBtn, #exitMenuBtn {
             position: fixed; bottom: 130px; z-index: 9999;
             background: linear-gradient(145deg, #ff6600, #cc4400);
@@ -569,6 +568,9 @@
         let isLowEnd = false;
         let lastStabilityValue = 100;
 
+        // ✅ НОВОЕ: Массив активных анимаций для контроля
+        let activeAnimations = [];
+
         const sharedGeometries = {};
         const sharedMaterials = {};
 
@@ -645,7 +647,6 @@
             }, 800);
         }
 
-        // ✅ НОВАЯ ФУНКЦИЯ: Возврат в главное меню
         function exitToMenu() {
             document.getElementById('victoryModal').classList.remove('show');
             document.getElementById('simulator-page').classList.remove('active');
@@ -674,7 +675,6 @@
             return true;
         }
 
-        // ✅ ИСПРАВЛЕНИЕ: Очистка аудио-узлов через disconnect()
         function playSound(freq, duration, type = 'square', volume = 0.08) {
             if (!ensureAudio()) return;
             try {
@@ -690,7 +690,6 @@
                 osc.start(now);
                 osc.stop(now + duration);
 
-                // ✅ Принудительная очистка узлов после завершения
                 setTimeout(() => {
                     try { osc.disconnect(); } catch(e){}
                     try { gain.disconnect(); } catch(e){}
@@ -734,7 +733,6 @@
             miss: () => playSound(200, 0.15, 'sawtooth', 0.08)
         };
 
-        // ✅ ИСПРАВЛЕНИЕ: Защита от спама уведомлений
         let notifTimeout = null;
         let lastNotifText = "";
 
@@ -772,6 +770,14 @@
             });
         }
 
+        // ✅ НОВОЕ: Очистка всех активных анимаций
+        function clearActiveAnimations() {
+            activeAnimations.forEach(anim => {
+                if (anim.cancel) anim.cancel();
+            });
+            activeAnimations = [];
+        }
+
         function fullGameRestart() {
             document.getElementById('victoryModal').classList.remove('show');
             state.gameCompleted = false;
@@ -801,6 +807,7 @@
             }
 
             resetTrailParticles();
+            clearActiveAnimations(); // ✅ Очистка анимаций
             showNotification("🔄 Игра перезапущена! Удачи, оператор!", 'success');
         }
 
@@ -831,6 +838,7 @@
             droneGroup.rotation.z = 0;
 
             resetTrailParticles();
+            clearActiveAnimations(); // ✅ Очистка анимаций
             showNotification("🔄 Упражнение перезапущено", 'success');
         }
 
@@ -1493,7 +1501,6 @@
 
         const raycaster = new THREE.Raycaster();
 
-        // ✅ ИСПРАВЛЕНИЕ: Надёжная логика стрельбы с защитой от спама
         function shootFromCenter() {
             if (!state.canShoot || state.isCrashed || state.gameCompleted) return;
 
@@ -1524,7 +1531,6 @@
             SFX.shoot();
 
             if (hitTarget) {
-                // ✅ ЖЁСТКАЯ БЛОКИРОВКА: hit() возвращает false для уже уничтоженных
                 if (hitTarget.hit()) {
                     state.destroyedCount++;
                     
@@ -1553,7 +1559,6 @@
                     crosshair.classList.add('locked');
                     setTimeout(() => crosshair.classList.remove('locked'), 300);
 
-                    // ✅ ИСПРАВЛЕНИЕ: Используем >= вместо ===
                     if (state.destroyedCount >= CONFIG.TARGET_COUNT) {
                         setTimeout(() => {
                             showVictoryModal();
@@ -1561,7 +1566,6 @@
                     }
                 }
             } else {
-                // Промах — воспроизводим звук промаха
                 SFX.miss();
             }
 
@@ -1618,20 +1622,37 @@
                 scene.add(smoke);
 
                 let frame = 0;
+                let animationId;
                 const animateSmoke = () => {
+                    // ✅ ФИКС: Проверка состояния игры
+                    if (state.gameCompleted || state.isCrashed) {
+                        scene.remove(smoke);
+                        smokeMat.dispose();
+                        return;
+                    }
+
                     frame++;
                     smoke.position.y += 0.02;
                     smoke.scale.multiplyScalar(1.03);
                     smoke.material.opacity = 0.6 * (1 - frame / 30);
 
                     if (frame < 30) {
-                        requestAnimationFrame(animateSmoke);
+                        animationId = requestAnimationFrame(animateSmoke);
                     } else {
                         scene.remove(smoke);
                         smokeMat.dispose();
                     }
                 };
                 animateSmoke();
+                
+                // ✅ Регистрируем анимацию для очистки
+                activeAnimations.push({
+                    cancel: () => {
+                        if (animationId) cancelAnimationFrame(animationId);
+                        scene.remove(smoke);
+                        smokeMat.dispose();
+                    }
+                });
             }
         }
 
@@ -1662,7 +1683,16 @@
             scene.add(particles);
 
             let frame = 0;
+            let animationId;
             const animateExplosion = () => {
+                // ✅ ФИКС: Проверка состояния игры
+                if (state.gameCompleted || state.isCrashed) {
+                    scene.remove(particles);
+                    geometry.dispose();
+                    particleMat.dispose();
+                    return;
+                }
+
                 frame++;
                 const pos = particles.geometry.attributes.position.array;
                 for (let i = 0; i < particleCount; i++) {
@@ -1674,7 +1704,7 @@
                 particleMat.opacity = 1 - frame / 40;
 
                 if (frame < 40) {
-                    requestAnimationFrame(animateExplosion);
+                    animationId = requestAnimationFrame(animateExplosion);
                 } else {
                     scene.remove(particles);
                     geometry.dispose();
@@ -1691,6 +1721,18 @@
                 scene.remove(lightFlash);
                 lightFlash.dispose();
             }, 300);
+
+            // ✅ Регистрируем анимацию для очистки
+            activeAnimations.push({
+                cancel: () => {
+                    if (animationId) cancelAnimationFrame(animationId);
+                    scene.remove(particles);
+                    geometry.dispose();
+                    particleMat.dispose();
+                    scene.remove(lightFlash);
+                    lightFlash.dispose();
+                }
+            });
         }
 
         function createShockwave(x, y, z) {
@@ -1705,20 +1747,37 @@
             scene.add(ring);
 
             let frame = 0;
+            let animationId;
             const animateRing = () => {
+                // ✅ ФИКС: Проверка состояния игры
+                if (state.gameCompleted || state.isCrashed) {
+                    scene.remove(ring);
+                    ringMat.dispose();
+                    return;
+                }
+
                 frame++;
                 const scale = 1 + frame * 0.3;
                 ring.scale.set(scale, scale, scale);
                 ring.material.opacity = 1 - frame / 25;
 
                 if (frame < 25) {
-                    requestAnimationFrame(animateRing);
+                    animationId = requestAnimationFrame(animateRing);
                 } else {
                     scene.remove(ring);
                     ringMat.dispose();
                 }
             };
             animateRing();
+
+            // ✅ Регистрируем анимацию для очистки
+            activeAnimations.push({
+                cancel: () => {
+                    if (animationId) cancelAnimationFrame(animationId);
+                    scene.remove(ring);
+                    ringMat.dispose();
+                }
+            });
         }
 
         function updateCamera() {
@@ -1821,7 +1880,6 @@
             window.addEventListener('resize', handleResize);
             document.getElementById('resetDroneBtn').addEventListener('click', resetExercise);
             document.getElementById('fullRestartBtn').addEventListener('click', fullGameRestart);
-            // ✅ НОВЫЕ обработчики для кнопок выхода
             document.getElementById('exitMenuBtn').addEventListener('click', exitToMenu);
             document.getElementById('exitToMenuBtn').addEventListener('click', exitToMenu);
         }
@@ -1830,6 +1888,7 @@
             if (state.animationId) {
                 cancelAnimationFrame(state.animationId);
             }
+            clearActiveAnimations(); // ✅ Очистка всех анимаций
             window.removeEventListener('keydown', handleKeyDown);
             window.removeEventListener('keyup', handleKeyUp);
             window.removeEventListener('click', handleClick);
