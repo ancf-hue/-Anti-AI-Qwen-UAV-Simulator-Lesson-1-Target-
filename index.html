@@ -9,6 +9,7 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { overflow: hidden; font-family: 'Segoe UI', 'Orbitron', monospace; background: #050b1a; color: #ccffcc; }
         
+        /*============ ЛОГОТИП ============*/
         .logo-header {
             position: fixed; top: 20px; left: 20px; z-index: 1000;
             display: flex; align-items: center; gap: 10px;
@@ -54,6 +55,7 @@
             text-shadow: 0 0 10px rgba(255, 170, 51, 0.8);
         }
 
+        /*============ СТРАНИЦА 1: ПРИВЕТСТВИЕ ============*/
         #intro-page {
             position: fixed; inset: 0;
             background: radial-gradient(ellipse at center, #0a1a3a 0%, #050a1f 50%, #000005 100%);
@@ -91,8 +93,125 @@
             text-align: center; letter-spacing: 5px;
             text-shadow: 0 0 20px rgba(255, 170, 51, 0.8);
         }
+
+        /*============ КНОПКИ УРОВНЕЙ СЛОЖНОСТИ ============*/
+        .level-buttons {
+            display: flex;
+            gap: 25px;
+            margin-top: 35px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .level-btn {
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            cursor: pointer;
+            position: relative;
+            transition: all 0.3s ease;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+        }
+        .level-btn::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background: inherit;
+            filter: blur(0);
+            transition: filter 0.3s;
+        }
+        .level-btn::after {
+            content: '';
+            position: absolute;
+            inset: -4px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            transition: border-color 0.3s;
+        }
+        .level-btn:hover {
+            transform: translateY(-5px) scale(1.08);
+            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.6);
+        }
+        .level-btn:hover::after {
+            border-color: rgba(255, 255, 255, 0.6);
+        }
+        .level-btn:active {
+            transform: translateY(2px) scale(0.98);
+        }
+        .level-btn.easy {
+            background: radial-gradient(circle at 30% 30%, #68d391, #48bb78, #2f855a);
+            box-shadow: 0 8px 25px rgba(72, 187, 120, 0.5), inset 0 -5px 15px rgba(0, 0, 0, 0.3);
+        }
+        .level-btn.medium {
+            background: radial-gradient(circle at 30% 30%, #f6e05e, #ecc94b, #b7791f);
+            box-shadow: 0 8px 25px rgba(236, 201, 75, 0.5), inset 0 -5px 15px rgba(0, 0, 0, 0.3);
+        }
+        .level-btn.hard {
+            background: radial-gradient(circle at 30% 30%, #fc8181, #e53e3e, #9b2c2c);
+            box-shadow: 0 8px 25px rgba(229, 62, 62, 0.5), inset 0 -5px 15px rgba(0, 0, 0, 0.3);
+        }
+        .level-btn.easy:hover {
+            box-shadow: 0 12px 40px rgba(72, 187, 120, 0.8), 0 0 60px rgba(72, 187, 120, 0.4);
+        }
+        .level-btn.medium:hover {
+            box-shadow: 0 12px 40px rgba(236, 201, 75, 0.8), 0 0 60px rgba(236, 201, 75, 0.4);
+        }
+        .level-btn.hard:hover {
+            box-shadow: 0 12px 40px rgba(229, 62, 62, 0.8), 0 0 60px rgba(229, 62, 62, 0.4);
+        }
+        .level-btn.selected {
+            transform: scale(1.15);
+            border-color: #ffffff;
+            animation: selectedPulse 1.5s ease-in-out infinite;
+        }
+        .level-btn.easy.selected {
+            box-shadow: 0 0 0 4px rgba(72, 187, 120, 0.3), 0 0 50px rgba(72, 187, 120, 0.8);
+        }
+        .level-btn.medium.selected {
+            box-shadow: 0 0 0 4px rgba(236, 201, 75, 0.3), 0 0 50px rgba(236, 201, 75, 0.8);
+        }
+        .level-btn.hard.selected {
+            box-shadow: 0 0 0 4px rgba(229, 62, 62, 0.3), 0 0 50px rgba(229, 62, 62, 0.8);
+        }
+        @keyframes selectedPulse {
+            0%, 100% { filter: brightness(1); }
+            50% { filter: brightness(1.3); }
+        }
+        .level-btn::before {
+            content: '';
+            position: absolute;
+            top: 15%;
+            left: 20%;
+            width: 30%;
+            height: 25%;
+            background: radial-gradient(ellipse, rgba(255, 255, 255, 0.6), transparent);
+            border-radius: 50%;
+        }
+        .level-indicator {
+            position: absolute;
+            bottom: -35px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 12px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            white-space: nowrap;
+            text-shadow: 0 0 10px currentColor;
+        }
+        .level-btn:hover .level-indicator,
+        .level-btn.selected .level-indicator {
+            opacity: 1;
+        }
+        .level-btn.easy .level-indicator { color: #48bb78; }
+        .level-btn.medium .level-indicator { color: #ecc94b; }
+        .level-btn.hard .level-indicator { color: #e53e3e; }
+
         .start-btn {
-            margin-top: 40px; padding: 18px 60px;
+            margin-top: 60px; padding: 18px 60px;
             font-size: 20px; font-weight: bold;
             background: linear-gradient(145deg, #ff6600, #cc4400);
             border: none; border-radius: 50px; color: white;
@@ -100,16 +219,23 @@
             box-shadow: 0 8px 0 #882200, 0 15px 30px rgba(255, 102, 0, 0.6);
             transition: all 0.2s;
             text-transform: uppercase; letter-spacing: 2px;
+            opacity: 0.5;
+            pointer-events: none;
         }
-        .start-btn:hover {
+        .start-btn.enabled {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .start-btn.enabled:hover {
             transform: translateY(-3px);
             box-shadow: 0 11px 0 #882200, 0 20px 40px rgba(255, 102, 0, 0.8);
         }
-        .start-btn:active {
+        .start-btn.enabled:active {
             transform: translateY(5px);
             box-shadow: 0 3px 0 #882200, 0 8px 15px rgba(255, 102, 0, 0.6);
         }
 
+        /*============ СТРАНИЦА 2: ТРЕНАЖЁР ============*/
         #simulator-page {
             position: fixed; inset: 0;
             opacity: 0; pointer-events: none;
@@ -134,6 +260,7 @@
             50% { opacity: 0.5; }
         }
 
+        /*============ UI ТРЕНАЖЁРА ============*/
         #stats-panel {
             position: fixed; top: 90px; left: 20px; z-index: 100;
             background: rgba(0, 0, 0, 0.7);
@@ -233,8 +360,9 @@
             font-family: monospace; z-index: 100;
         }
 
-        #resetDroneBtn, #exitMenuBtn {
-            position: fixed; bottom: 130px; z-index: 9999;
+        #resetDroneBtn {
+            position: fixed; bottom: 130px; left: 50%;
+            transform: translateX(-50%); z-index: 200;
             background: linear-gradient(145deg, #ff6600, #cc4400);
             border: none; padding: 10px 30px;
             border-radius: 40px; font-weight: bold;
@@ -242,14 +370,14 @@
             box-shadow: 0 4px 0 #882200, 0 6px 15px rgba(255,102,0,0.6);
             transition: 0.1s; font-size: 14px; color: white;
         }
-        #resetDroneBtn { left: calc(50% - 160px); }
-        #exitMenuBtn {
-            left: calc(50% + 10px);
-            background: linear-gradient(145deg, #cc3333, #882222);
-            box-shadow: 0 4px 0 #551111, 0 6px 15px rgba(200,50,50,0.6);
+        #resetDroneBtn:hover {
+            background: linear-gradient(145deg, #ffaa33, #ee7711);
+            transform: translateX(-50%) translateY(-1px);
         }
-        #resetDroneBtn:hover, #exitMenuBtn:hover { transform: translateY(-1px); }
-        #resetDroneBtn:active, #exitMenuBtn:active { transform: translateY(3px); box-shadow: 0 1px 0 #882200; }
+        #resetDroneBtn:active {
+            transform: translateX(-50%) translateY(3px);
+            box-shadow: 0 1px 0 #882200;
+        }
 
         #notification {
             position: fixed; top: 140px; left: 50%;
@@ -257,7 +385,7 @@
             background: linear-gradient(135deg, #00ccff, #0066ff);
             color: white; padding: 12px 28px;
             border-radius: 30px; font-weight: bold;
-            font-family: monospace; z-index: 9999;
+            font-family: monospace; z-index: 250;
             opacity: 0; transition: opacity 0.3s, top 0.3s;
             box-shadow: 0 8px 25px rgba(0, 200, 255, 0.5);
             white-space: nowrap; font-size: 14px;
@@ -281,7 +409,7 @@
             position: fixed; inset: 0;
             background: rgba(0, 0, 0, 0.9);
             backdrop-filter: blur(15px);
-            z-index: 10000;
+            z-index: 1000;
             display: flex; align-items: center; justify-content: center;
             opacity: 0; visibility: hidden;
             transition: all 0.5s ease;
@@ -317,23 +445,40 @@
         .victory-stats span {
             color: #ffaa33; font-size: 32px; font-weight: bold;
         }
-        .restart-game-btn, .exit-game-btn {
+        .victory-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 20px;
+        }
+        .restart-game-btn, .exit-menu-btn {
+            background: linear-gradient(145deg, #ff6600, #cc4400);
             border: none; padding: 15px 40px;
             border-radius: 50px; font-size: 18px;
             font-weight: bold; color: white;
-            cursor: pointer; margin: 10px;
+            cursor: pointer;
             transition: 0.2s;
-        }
-        .restart-game-btn {
-            background: linear-gradient(145deg, #ff6600, #cc4400);
             box-shadow: 0 5px 0 #882200;
         }
-        .exit-game-btn {
-            background: linear-gradient(145deg, #cc3333, #882222);
-            box-shadow: 0 5px 0 #551111;
+        .restart-game-btn:hover, .exit-menu-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 7px 0 #882200;
         }
-        .restart-game-btn:hover, .exit-game-btn:hover { transform: translateY(-2px); }
-        .restart-game-btn:active, .exit-game-btn:active { transform: translateY(3px); }
+        .restart-game-btn:active, .exit-menu-btn:active {
+            transform: translateY(3px);
+            box-shadow: 0 2px 0 #882200;
+        }
+        .exit-menu-btn {
+            background: linear-gradient(145deg, #00ccff, #0066ff);
+            box-shadow: 0 5px 0 #004488;
+        }
+        .exit-menu-btn:hover {
+            box-shadow: 0 7px 0 #004488;
+        }
+        .exit-menu-btn:active {
+            box-shadow: 0 2px 0 #004488;
+        }
 
         .support-container {
             position: fixed; bottom: 15px; left: 50%;
@@ -379,7 +524,7 @@
             display: none;
             position: fixed; inset: 0;
             background: rgba(0, 0, 0, 0.95);
-            color: #ff5555; z-index: 99999;
+            color: #ff5555; z-index: 9999;
             padding: 40px; font-family: monospace;
             font-size: 18px; text-align: center;
             align-items: center; justify-content: center;
@@ -406,16 +551,17 @@
             .logo-sub { font-size: 9px; }
             .intro-title { font-size: 28px; }
             .intro-subtitle { font-size: 14px; }
-            .start-btn { padding: 14px 40px; font-size: 16px; }
+            .level-btn { width: 70px; height: 70px; }
+            .level-buttons { gap: 18px; }
+            .start-btn { padding: 14px 40px; font-size: 16px; margin-top: 50px; }
             .victory-content { padding: 30px; }
             .victory-content h2 { font-size: 32px; }
-            #resetDroneBtn, #exitMenuBtn { bottom: 100px; padding: 8px 20px; font-size: 12px; }
-            #resetDroneBtn { left: calc(50% - 120px); }
-            #exitMenuBtn { left: calc(50% + 10px); }
+            .restart-game-btn, .exit-menu-btn { padding: 12px 30px; font-size: 16px; }
         }
     </style>
 </head>
 <body>
+    <!--============ ЛОГОТИП ============-->
     <div class="logo-header">
         <img id="logoImg" src="favicon.ico" alt="БПЛА">
         <div class="logo-text">
@@ -424,13 +570,29 @@
         </div>
     </div>
 
+    <!--============ СТРАНИЦА 1: ПРИВЕТСТВИЕ ============-->
     <div id="intro-page">
         <img src="uav-operator.jpg" alt="Оператор БПЛА Диджей" class="intro-image">
         <h1 class="intro-title">ОПЕРАТОР ДИДЖЕЙ</h1>
-        <div class="intro-subtitle">Qwen · БПЛА ТРЕНАЖЁР · УРОК 1</div>
+        <div class="intro-subtitle">Qwen · БПЛА ТРЕНАЖЁР</div>
+        
+        <!--============ КНОПКИ УРОВНЕЙ ============-->
+        <div class="level-buttons">
+            <button class="level-btn easy" data-level="easy" title="Лёгкий уровень">
+                <span class="level-indicator">ЛЁГКИЙ</span>
+            </button>
+            <button class="level-btn medium" data-level="medium" title="Средний уровень">
+                <span class="level-indicator">СРЕДНИЙ</span>
+            </button>
+            <button class="level-btn hard" data-level="hard" title="Сложный уровень">
+                <span class="level-indicator">СЛОЖНЫЙ</span>
+            </button>
+        </div>
+        
         <button class="start-btn" id="startBtn">НАЧАТЬ ОБУЧЕНИЕ</button>
     </div>
 
+    <!--============ СТРАНИЦА 2: ТРЕНАЖЁР ============-->
     <div id="simulator-page">
         <div id="webgl-error">
             <h2>⚠️ WebGL не поддерживается</h2>
@@ -447,7 +609,7 @@
             <div class="stats">
                 <div class="stat">⚡ Стаб: <span id="stability">98</span>%</div>
                 <div class="stat">🎯 Попаданий: <span id="hits">0</span></div>
-                <div class="stat">📡 Урок 1: Тир</div>
+                <div class="stat">📡 <span id="levelLabel">Урок 1: Тир</span></div>
             </div>
         </div>
 
@@ -461,7 +623,7 @@
 
         <div id="target-panel">
             🎯 УНИЧТОЖИТЬ МИШЕНИ<br>
-            <span id="target-counter">0</span> / 5<br>
+            <span id="target-counter">0</span> / <span id="target-total">5</span><br>
             <span style="font-size:11px;">💥 ЛКМ — ЭМИ-удар</span>
         </div>
 
@@ -472,17 +634,16 @@
             ⚠️ Не врезайтесь в стены!
         </div>
 
-        <div class="lesson-badge">📡 ЗАДАНИЕ: Поразить 5 движущихся мишеней</div>
+        <div class="lesson-badge" id="lessonBadge">📡 ЗАДАНИЕ: Поразить 5 движущихся мишеней</div>
 
-        <button id="resetDroneBtn">🔄 Перезапустить</button>
-        <button id="exitMenuBtn">🚪 Выйти в меню</button>
+        <button id="resetDroneBtn">🔄 Перезапустить упражнение</button>
 
         <div class="support-container">
             <div class="support-block">
                 <strong>Приложение бесплатное</strong>. Было и останется.<br>
                 🤝
                 <div class="phone-row">
-                    Перевод: <span class="phone-number" id="phoneNumber">8-920-227-56-76</span>
+                    Перевод: <span class="phone-number" id="phoneNumber">8-920-📱 227-56-76</span>
                     <button class="copy-btn" id="copyPhoneBtn">📋 Копировать</button>
                 </div>
                 👉 <a href="https://ancf-hue.github.io/" target="_blank">Каталог 🌟 Anti-AI Shield</a>
@@ -490,44 +651,90 @@
         </div>
     </div>
 
+    <!-- Модальное окно победы -->
     <div id="victoryModal" class="victory-modal">
         <div class="victory-content">
             <h2>🏆 ПОБЕДА! 🏆</h2>
             <p>Отличная работа, оператор "Диджей"!<br>Все цели уничтожены!</p>
             <div class="victory-stats">
-                Уничтожено: <span id="victoryHits">5</span>/5 🎯<br>
+                Уничтожено: <span id="victoryHits">5</span>/<span id="victoryTotal">5</span> 🎯<br>
                 Стабильность: <span id="victoryStability">100</span>% ⚡
             </div>
             <p>Вы успешно завершили обучение!</p>
-            <button class="restart-game-btn" id="fullRestartBtn">🔄 НАЧАТЬ ЗАНОВО</button>
-            <button class="exit-game-btn" id="exitToMenuBtn">🚪 В МЕНЮ</button>
+            <div class="victory-buttons">
+                <button class="restart-game-btn" id="fullRestartBtn">🔄 НАЧАТЬ ЗАНОВО</button>
+                <button class="exit-menu-btn" id="exitMenuBtn">🏠 ВЫХОД В МЕНЮ</button>
+            </div>
         </div>
     </div>
 
+    <!--============ АУДИО ============-->
     <audio id="bg-music" loop>
         <source src="didzhey-theme.mp3" type="audio/mpeg">
     </audio>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
+        //============================================================
+        //============ КОНФИГУРАЦИЯ УРОВНЕЙ ===========================
+        //============================================================
+        const LEVELS = {
+            easy: {
+                name: 'ЛЁГКИЙ',
+                color: '#48bb78',
+                droneSpeed: 0.09,
+                droneDrag: 0.94,
+                maxTilt: 0.35,
+                targetCount: 5,
+                targetSpeed: 0.012,
+                targetRadius: 2.5,
+                shootCooldown: 500,
+                collisionThreshold: 0.08,
+                crashThreshold: 0.2,
+                lessonText: '📡 ЗАДАНИЕ: Поразить 5 медленных мишеней'
+            },
+            medium: {
+                name: 'СРЕДНИЙ',
+                color: '#ecc94b',
+                droneSpeed: 0.11,
+                droneDrag: 0.94,
+                maxTilt: 0.4,
+                targetCount: 5,
+                targetSpeed: 0.018,
+                targetRadius: 3.5,
+                shootCooldown: 400,
+                collisionThreshold: 0.05,
+                crashThreshold: 0.15,
+                lessonText: '📡 ЗАДАНИЕ: Поразить 5 движущихся мишеней'
+            },
+            hard: {
+                name: 'СЛОЖНЫЙ',
+                color: '#e53e3e',
+                droneSpeed: 0.14,
+                droneDrag: 0.95,
+                maxTilt: 0.5,
+                targetCount: 7,
+                targetSpeed: 0.028,
+                targetRadius: 4.5,
+                shootCooldown: 300,
+                collisionThreshold: 0.03,
+                crashThreshold: 0.1,
+                lessonText: '📡 ЗАДАНИЕ: Поразить 7 быстрых мишеней!'
+            }
+        };
+
+        // Базовая конфигурация (общие параметры)
         const CONFIG = {
-            DRONE_SPEED: 0.11,
-            DRONE_DRAG: 0.94,
-            MAX_TILT: 0.4,
             DRONE_HOVER_Y: 1.25,
             DRONE_HOVER_AMP: 0.03,
             DRONE_HOVER_FREQ: 0.0012,
-            COLLISION_FORCE_THRESHOLD: 0.05,
-            CRASH_FORCE_THRESHOLD: 0.15,
             LIMIT_X: 10.2,
             LIMIT_Z: 8.5,
             MIN_X: -10.2,
             MIN_Z: -8.2,
             GROUND_Y: -0.45,
             GRAVITY: 0.015,
-            BOUNCE_FACTOR: -0.6,
-            TARGET_COUNT: 5,
-            SHOOT_COOLDOWN: 400,
+            BOUNCE_FACTOR: 0.6,
             CAMERA_OFFSET: { x: -4.5, y: 3.2, z: 6 },
             CAMERA_LERP: 0.09,
             LOW_END_CORES: 4,
@@ -536,9 +743,13 @@
             DUST_COUNT_LOW: 20,
             PARTICLE_COUNT_HIGH: 50,
             PARTICLE_COUNT_LOW: 20,
-            TRAIL_LENGTH: 20,
-            SHOOT_SOUND_INTERVAL: 200
+            TRAIL_LENGTH: 20
         };
+
+        //============================================================
+        //============ СОСТОЯНИЕ ПРИЛОЖЕНИЯ ===========================
+        //============================================================
+        let currentLevel = null; // Выбранный уровень
 
         const state = {
             keys: {},
@@ -554,10 +765,10 @@
             trailTimer: 0,
             animationId: null,
             simulatorInitialized: false,
-            gameCompleted: false,
-            lastShootSound: 0
+            gameCompleted: false
         };
 
+        // Переменные Three.js
         let scene, camera, renderer, droneGroup;
         let propellers = [];
         let trailParticles = [];
@@ -568,12 +779,28 @@
         let isLowEnd = false;
         let lastStabilityValue = 100;
 
-        // ✅ НОВОЕ: Массив активных анимаций для контроля
-        let activeAnimations = [];
-
+        // Общие геометрии для эффектов (оптимизация памяти)
         const sharedGeometries = {};
-        const sharedMaterials = {};
 
+        //============================================================
+        //============ ВЫБОР УРОВНЯ ===================================
+        //============================================================
+        const levelButtons = document.querySelectorAll('.level-btn');
+        const startBtn = document.getElementById('startBtn');
+
+        levelButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                levelButtons.forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+                currentLevel = btn.dataset.level;
+                startBtn.classList.add('enabled');
+                ensureAudio();
+            });
+        });
+
+        //============================================================
+        //============ FAVICON ========================================
+        //============================================================
         (function setupFavicon() {
             const img = document.getElementById('logoImg');
             const fallbackSVG = 'data:image/svg+xml;utf8,' + encodeURIComponent(
@@ -584,13 +811,20 @@
             );
             let tried = false;
             img.onerror = function() {
-                if (!tried) { tried = true; img.src = fallbackSVG; }
-                else { img.onerror = null; }
+                if (!tried) {
+                    tried = true;
+                    img.src = fallbackSVG;
+                } else {
+                    img.onerror = null;
+                }
             };
         })();
 
+        //============================================================
+        //============ КОПИРОВАНИЕ НОМЕРА =============================
+        //============================================================
         function copyPhone() {
-            const phone = document.getElementById('phoneNumber').innerText;
+            const phone = document.getElementById('phoneNumber').textContent;
             const btn = document.getElementById('copyPhoneBtn');
             if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) {
                 navigator.clipboard.writeText(phone)
@@ -630,9 +864,16 @@
 
         document.getElementById('copyPhoneBtn').addEventListener('click', copyPhone);
 
-        document.getElementById('startBtn').addEventListener('click', startSimulator);
+        //============================================================
+        //============ ПЕРЕКЛЮЧЕНИЕ СТРАНИЦ ===========================
+        //============================================================
+        startBtn.addEventListener('click', startSimulator);
 
         function startSimulator() {
+            if (!currentLevel) {
+                showNotification('⚠️ Сначала выберите уровень сложности!', 'info');
+                return;
+            }
             const music = document.getElementById('bg-music');
             music.volume = 0.4;
             music.play().catch(e => console.log('🎵 Автозапуск музыки заблокирован:', e.message));
@@ -647,17 +888,49 @@
             }, 800);
         }
 
+        //============================================================
+        //============ ВЫХОД В МЕНЮ ===================================
+        //============================================================
         function exitToMenu() {
+            // Скрываем модальное окно победы
             document.getElementById('victoryModal').classList.remove('show');
+            
+            // Скрываем страницу тренажёра
             document.getElementById('simulator-page').classList.remove('active');
+            
+            // Показываем intro-page
             setTimeout(() => {
                 document.getElementById('intro-page').classList.remove('hidden');
             }, 300);
+            
+            // Сбрасываем состояние игры
+            state.gameCompleted = false;
+            state.destroyedCount = 0;
+            state.isCrashed = false;
+            state.velocity = { x: 0, z: 0 };
+            state.verticalVelocity = 0;
+            state.pitch = 0;
+            state.roll = 0;
+            state.canShoot = true;
+            
+            // Снимаем выделение с кнопок уровней
+            levelButtons.forEach(b => b.classList.remove('selected'));
+            currentLevel = null;
+            
+            // Отключаем кнопку "НАЧАТЬ ОБУЧЕНИЕ"
+            startBtn.classList.remove('enabled');
+            
+            // Останавливаем музыку
             const music = document.getElementById('bg-music');
             music.pause();
             music.currentTime = 0;
+            
+            showNotification('🏠 Возврат в главное меню', 'info');
         }
 
+        //============================================================
+        //============ ЗВУКОВАЯ СИСТЕМА ===============================
+        //============================================================
         let audioCtx = null;
         let audioHintShown = false;
 
@@ -689,19 +962,11 @@
                 gain.connect(audioCtx.destination);
                 osc.start(now);
                 osc.stop(now + duration);
-
-                setTimeout(() => {
-                    try { osc.disconnect(); } catch(e){}
-                    try { gain.disconnect(); } catch(e){}
-                }, (duration * 1000) + 50);
             } catch (e) {}
         }
 
         const SFX = {
             shoot: () => {
-                const now = Date.now();
-                if (now - state.lastShootSound < CONFIG.SHOOT_SOUND_INTERVAL) return;
-                state.lastShootSound = now;
                 playSound(800, 0.08, 'square', 0.1);
                 playSound(400, 0.15, 'sawtooth', 0.05);
             },
@@ -729,37 +994,37 @@
                 setTimeout(() => playSound(784, 0.15, 'sine', 0.12), 300);
                 setTimeout(() => playSound(1047, 0.3, 'sine', 0.15), 450);
             },
-            stabilize: () => playSound(400, 0.1, 'triangle', 0.08),
-            miss: () => playSound(200, 0.15, 'sawtooth', 0.08)
+            stabilize: () => playSound(400, 0.1, 'triangle', 0.08)
         };
 
+        //============================================================
+        //============ УВЕДОМЛЕНИЯ ====================================
+        //============================================================
         let notifTimeout = null;
-        let lastNotifText = "";
 
         function showNotification(text, type = '') {
             const n = document.getElementById('notification');
-            if (!n || lastNotifText === text) return;
-            
-            lastNotifText = text;
             n.innerText = text;
             n.className = 'show ' + type;
             if (notifTimeout) clearTimeout(notifTimeout);
-            notifTimeout = setTimeout(() => {
-                n.className = '';
-                lastNotifText = "";
-            }, 2000);
+            notifTimeout = setTimeout(() => n.className = '', 2000);
         }
 
+        //============================================================
+        //============ ПОБЕДА И ПЕРЕЗАПУСК ============================
+        //============================================================
         function showVictoryModal() {
             if (state.gameCompleted) return;
             state.gameCompleted = true;
             const stability = document.getElementById('stability').innerText;
+            const total = LEVELS[currentLevel].targetCount;
             document.getElementById('victoryHits').innerText = state.destroyedCount;
+            document.getElementById('victoryTotal').innerText = total;
             document.getElementById('victoryStability').innerText = stability;
             const modal = document.getElementById('victoryModal');
             modal.classList.add('show');
             SFX.victory();
-            showNotification("✅ УРОК 1 ПРОЙДЕН! Отличная работа, оператор 'Диджей'!", 'success');
+            showNotification(`✅ УРОВЕНЬ "${LEVELS[currentLevel].name}" ПРОЙДЕН!`, 'success');
         }
 
         function resetTrailParticles() {
@@ -768,14 +1033,6 @@
                 p.scale.set(1, 1, 1);
                 if (p.userData) p.userData.life = 0;
             });
-        }
-
-        // ✅ НОВОЕ: Очистка всех активных анимаций
-        function clearActiveAnimations() {
-            activeAnimations.forEach(anim => {
-                if (anim.cancel) anim.cancel();
-            });
-            activeAnimations = [];
         }
 
         function fullGameRestart() {
@@ -791,9 +1048,13 @@
             state.trailIndex = 0;
             state.trailTimer = 0;
 
+            const total = LEVELS[currentLevel].targetCount;
             document.getElementById('hits').innerText = '0';
             document.getElementById('target-counter').innerText = '0';
+            document.getElementById('target-total').innerText = total;
             document.getElementById('stability').innerText = '100';
+            document.getElementById('levelLabel').innerText = `Уровень: ${LEVELS[currentLevel].name}`;
+            document.getElementById('lessonBadge').innerText = LEVELS[currentLevel].lessonText;
 
             if (droneGroup) {
                 droneGroup.position.set(0, CONFIG.DRONE_HOVER_Y, 0);
@@ -802,13 +1063,15 @@
                 droneGroup.rotation.z = 0;
             }
 
-            for (let t of targets) {
-                if (t && typeof t.reset === 'function') t.reset();
-            }
+            // Удаляем старые мишени и создаём новые
+            targets.forEach(t => {
+                if (t.group && t.group.parent) t.group.parent.remove(t.group);
+            });
+            targets = [];
+            setupTargets();
 
             resetTrailParticles();
-            clearActiveAnimations(); // ✅ Очистка анимаций
-            showNotification("🔄 Игра перезапущена! Удачи, оператор!", 'success');
+            showNotification(`🔄 Уровень "${LEVELS[currentLevel].name}" перезапущен!`, 'success');
         }
 
         function resetExercise() {
@@ -830,7 +1093,7 @@
             document.getElementById('target-counter').innerText = '0';
             document.getElementById('stability').innerText = '100';
 
-            for (let t of targets) t.reset();
+            targets.forEach(t => t.reset());
 
             droneGroup.position.set(0, CONFIG.DRONE_HOVER_Y, 0);
             droneGroup.rotation.x = 0;
@@ -838,10 +1101,12 @@
             droneGroup.rotation.z = 0;
 
             resetTrailParticles();
-            clearActiveAnimations(); // ✅ Очистка анимаций
             showNotification("🔄 Упражнение перезапущено", 'success');
         }
 
+        //============================================================
+        //============ ИНИЦИАЛИЗАЦИЯ ТРЕНАЖЁРА ========================
+        //============================================================
         function initSimulator() {
             console.log('🚁 Инициализация тренажёра...');
             if (typeof THREE === 'undefined') {
@@ -854,6 +1119,7 @@
                 return;
             }
 
+            // Кэшируем общие геометрии для эффектов
             sharedGeometries.smoke = new THREE.SphereGeometry(0.12, 6, 6);
             sharedGeometries.flash = new THREE.SphereGeometry(0.25, 8, 8);
             sharedGeometries.ring = new THREE.RingGeometry(0.1, 0.2, 32);
@@ -868,6 +1134,9 @@
             setupTargets();
             setupEventListeners();
 
+            // Применяем настройки уровня
+            applyLevelSettings();
+
             state.simulatorInitialized = true;
 
             setTimeout(() => {
@@ -880,7 +1149,20 @@
             }, 1500);
 
             animate();
-            console.log('✅ Тренажёр запущен. Оператор ДИДЖЕЙ — к выполнению задачи!');
+            console.log(`✅ Тренажёр запущен. Уровень: ${LEVELS[currentLevel].name}`);
+        }
+
+        function applyLevelSettings() {
+            const level = LEVELS[currentLevel];
+            const total = level.targetCount;
+            document.getElementById('target-total').innerText = total;
+            document.getElementById('levelLabel').innerText = `Уровень: ${level.name}`;
+            document.getElementById('lessonBadge').innerText = level.lessonText;
+            
+            // Меняем цвет границы панели статистики под уровень
+            const statsPanel = document.getElementById('stats-panel');
+            statsPanel.style.borderLeftColor = level.color;
+            statsPanel.style.boxShadow = `0 0 20px ${level.color}40`;
         }
 
         function checkWebGL() {
@@ -899,6 +1181,9 @@
             }
         }
 
+        //============================================================
+        //============ СЦЕНА ==========================================
+        //============================================================
         function setupScene() {
             scene = new THREE.Scene();
             scene.background = null;
@@ -1034,6 +1319,9 @@
             }
         }
 
+        //============================================================
+        //============ FPV-ДРОН =======================================
+        //============================================================
         function setupDrone() {
             droneGroup = new THREE.Group();
             scene.add(droneGroup);
@@ -1207,8 +1495,6 @@
             const droneLight = new THREE.PointLight(0x00ccff, 1.5, 4);
             droneLight.position.set(0, -0.03, 0);
             droneGroup.add(droneLight);
-
-            console.log("🛸 Высокодетализированный FPV-дрон с защитой винтов успешно сгенерирован!");
         }
 
         function setupTrail() {
@@ -1345,54 +1631,71 @@
                 reset() {
                     this.active = true;
                     this.group.visible = true;
-                    this.group.position.set(this.startX, -0.35, this.startZ);
+                    this.group.position.set(this.startX, 0, this.startZ);
                     this.angleX = Math.random() * Math.PI * 2;
                     this.angleZ = Math.random() * Math.PI * 2;
-                    this.radiusX = 3.2 + Math.random() * 2;
-                    this.radiusZ = 2.8 + Math.random() * 2;
-                    this.speed = 0.015 + Math.random() * 0.012;
+                    const level = LEVELS[currentLevel];
+                    this.radiusX = level.targetRadius * (0.8 + Math.random() * 0.4);
+                    this.radiusZ = level.targetRadius * (0.8 + Math.random() * 0.4);
+                    this.speed = level.targetSpeed * (0.8 + Math.random() * 0.4);
                     this.time = Math.random() * 100;
                 }
             }
 
-            const startPos = [[-4, -3], [3.5, -2.5], [-2, -4], [5, -1.5], [0, -5]];
-            for (let i = 0; i < CONFIG.TARGET_COUNT; i++) {
-                const pos = startPos[i % startPos.length];
+            const level = LEVELS[currentLevel];
+            const count = level.targetCount;
+            
+            // Генерируем позиции мишеней в зависимости от количества
+            const positions = [];
+            if (count <= 5) {
+                positions.push([-4, -3], [3.5, -2.5], [-2, -4], [5, -1.5], [0, -5]);
+            } else {
+                // Для 7 мишеней добавляем ещё 2 позиции
+                positions.push([-4, -3], [3.5, -2.5], [-2, -4], [5, -1.5], [0, -5], [-6, -1], [6, -4]);
+            }
+            
+            for (let i = 0; i < count; i++) {
+                const pos = positions[i % positions.length];
                 targets.push(new MovingTarget(scene, pos[0], pos[1]));
             }
         }
 
+        //============================================================
+        //============ УПРАВЛЕНИЕ =====================================
+        //============================================================
         function applyCollision() {
             const pos = droneGroup.position;
             let collided = false;
             let impactForce = 0;
+            const level = LEVELS[currentLevel];
 
+            // ✅ ИСПРАВЛЕНО: корректный отскок с сохранением направления
             if (pos.x > CONFIG.LIMIT_X) {
                 impactForce = Math.max(impactForce, Math.abs(state.velocity.x));
                 pos.x = CONFIG.LIMIT_X;
-                state.velocity.x = state.velocity.x > 0 ? 0 : state.velocity.x * CONFIG.BOUNCE_FACTOR;
+                state.velocity.x = -Math.abs(state.velocity.x) * CONFIG.BOUNCE_FACTOR;
                 collided = true;
             }
             if (pos.x < CONFIG.MIN_X) {
                 impactForce = Math.max(impactForce, Math.abs(state.velocity.x));
                 pos.x = CONFIG.MIN_X;
-                state.velocity.x = state.velocity.x < 0 ? 0 : state.velocity.x * CONFIG.BOUNCE_FACTOR;
+                state.velocity.x = Math.abs(state.velocity.x) * CONFIG.BOUNCE_FACTOR;
                 collided = true;
             }
             if (pos.z > CONFIG.LIMIT_Z) {
                 impactForce = Math.max(impactForce, Math.abs(state.velocity.z));
                 pos.z = CONFIG.LIMIT_Z;
-                state.velocity.z = state.velocity.z > 0 ? 0 : state.velocity.z * CONFIG.BOUNCE_FACTOR;
+                state.velocity.z = -Math.abs(state.velocity.z) * CONFIG.BOUNCE_FACTOR;
                 collided = true;
             }
             if (pos.z < CONFIG.MIN_Z) {
                 impactForce = Math.max(impactForce, Math.abs(state.velocity.z));
                 pos.z = CONFIG.MIN_Z;
-                state.velocity.z = state.velocity.z < 0 ? 0 : state.velocity.z * CONFIG.BOUNCE_FACTOR;
+                state.velocity.z = Math.abs(state.velocity.z) * CONFIG.BOUNCE_FACTOR;
                 collided = true;
             }
 
-            if (collided && impactForce > CONFIG.COLLISION_FORCE_THRESHOLD) {
+            if (collided && impactForce > level.collisionThreshold) {
                 triggerCollisionEffect(impactForce);
             }
         }
@@ -1402,7 +1705,8 @@
             flash.classList.add('active');
             setTimeout(() => flash.classList.remove('active'), 150);
 
-            if (force >= CONFIG.CRASH_FORCE_THRESHOLD && !state.isCrashed) {
+            const level = LEVELS[currentLevel];
+            if (force >= level.crashThreshold && !state.isCrashed) {
                 state.isCrashed = true;
                 state.verticalVelocity = 0;
                 showNotification("💥 КРУШЕНИЕ! Дрон повреждён. Нажмите 'Перезапуск'", 'hit');
@@ -1444,6 +1748,8 @@
         }
 
         function handleMovement() {
+            const level = LEVELS[currentLevel];
+            
             if (state.isCrashed || state.gameCompleted) {
                 if (state.gameCompleted) return;
                 state.verticalVelocity -= CONFIG.GRAVITY;
@@ -1472,8 +1778,8 @@
             if (state.keys.ArrowLeft || state.keys.a || state.keys.A || state.keys['ф'] || state.keys['Ф']) right = -1;
             if (state.keys.ArrowRight || state.keys.d || state.keys.D || state.keys['в'] || state.keys['В']) right = 1;
 
-            const targetPitch = forward * CONFIG.MAX_TILT;
-            const targetRoll = right * CONFIG.MAX_TILT;
+            const targetPitch = forward * level.maxTilt;
+            const targetRoll = right * level.maxTilt;
 
             state.pitch += (targetPitch - state.pitch) * 0.23;
             state.roll += (targetRoll - state.roll) * 0.23;
@@ -1481,11 +1787,11 @@
             droneGroup.rotation.x = state.pitch;
             droneGroup.rotation.z = state.roll;
 
-            state.velocity.x += right * CONFIG.DRONE_SPEED * 0.09;
-            state.velocity.z += forward * CONFIG.DRONE_SPEED * 0.09;
+            state.velocity.x += right * level.droneSpeed * 0.09;
+            state.velocity.z += forward * level.droneSpeed * 0.09;
 
-            state.velocity.x *= CONFIG.DRONE_DRAG;
-            state.velocity.z *= CONFIG.DRONE_DRAG;
+            state.velocity.x *= level.droneDrag;
+            state.velocity.z *= level.droneDrag;
 
             droneGroup.position.x += state.velocity.x;
             droneGroup.position.z += state.velocity.z;
@@ -1499,19 +1805,20 @@
             document.getElementById('stability').innerText = lastStabilityValue;
         }
 
+        //============================================================
+        //============ СТРЕЛЬБА =======================================
+        //============================================================
         const raycaster = new THREE.Raycaster();
 
         function shootFromCenter() {
             if (!state.canShoot || state.isCrashed || state.gameCompleted) return;
 
-            const dronePos = droneGroup.position.clone();
-            const forward = new THREE.Vector3()
-                .subVectors(dronePos, camera.position)
-                .normalize();
+            // ✅ ИСПРАВЛЕНО: используем направление взгляда камеры
+            const forward = new THREE.Vector3();
+            camera.getWorldDirection(forward);
 
-            const muzzleOffset = new THREE.Vector3(0, 0, 0.5)
-                .applyQuaternion(droneGroup.quaternion);
-            const muzzlePos = dronePos.clone().add(muzzleOffset);
+            // ✅ ИСПРАВЛЕНО: стреляем из позиции камеры (от первого лица)
+            const muzzlePos = camera.position.clone();
 
             raycaster.set(muzzlePos, forward);
 
@@ -1533,11 +1840,8 @@
             if (hitTarget) {
                 if (hitTarget.hit()) {
                     state.destroyedCount++;
-                    
-                    requestAnimationFrame(() => {
-                        document.getElementById('hits').innerText = state.destroyedCount;
-                        document.getElementById('target-counter').innerText = state.destroyedCount;
-                    });
+                    document.getElementById('hits').innerText = state.destroyedCount;
+                    document.getElementById('target-counter').innerText = state.destroyedCount;
 
                     createExplosion(
                         hitTarget.group.position.x,
@@ -1553,24 +1857,23 @@
                     SFX.explosion();
                     setTimeout(() => SFX.hit(), 100);
 
-                    showNotification(`🎯 ПОПАДАНИЕ! ${state.destroyedCount}/${CONFIG.TARGET_COUNT}`, 'success');
+                    showNotification(`🎯 ПОПАДАНИЕ! ${state.destroyedCount}/${LEVELS[currentLevel].targetCount}`, 'hit');
 
                     const crosshair = document.getElementById('crosshair');
                     crosshair.classList.add('locked');
                     setTimeout(() => crosshair.classList.remove('locked'), 300);
 
-                    if (state.destroyedCount >= CONFIG.TARGET_COUNT) {
+                    if (state.destroyedCount === LEVELS[currentLevel].targetCount) {
                         setTimeout(() => {
                             showVictoryModal();
                         }, 500);
                     }
                 }
-            } else {
-                SFX.miss();
             }
 
+            const level = LEVELS[currentLevel];
             state.canShoot = false;
-            setTimeout(() => { state.canShoot = true; }, CONFIG.SHOOT_COOLDOWN);
+            setTimeout(() => { state.canShoot = true; }, level.shootCooldown);
         }
 
         function handleClick(event) {
@@ -1579,6 +1882,7 @@
             shootFromCenter();
         }
 
+        // ✅ ИСПРАВЛЕНО: вспышка у камеры (от первого лица)
         function createMuzzleFlash() {
             const flashGeo = sharedGeometries.flash;
             const flashMat = new THREE.MeshBasicMaterial({
@@ -1599,7 +1903,7 @@
                 scene.remove(flashMesh);
                 scene.remove(light);
                 flashMat.dispose();
-                light.dispose();
+                // ✅ ИСПРАВЛЕНО: убран light.dispose() — у PointLight его нет
             }, 80);
         }
 
@@ -1622,37 +1926,20 @@
                 scene.add(smoke);
 
                 let frame = 0;
-                let animationId;
                 const animateSmoke = () => {
-                    // ✅ ФИКС: Проверка состояния игры
-                    if (state.gameCompleted || state.isCrashed) {
-                        scene.remove(smoke);
-                        smokeMat.dispose();
-                        return;
-                    }
-
                     frame++;
                     smoke.position.y += 0.02;
                     smoke.scale.multiplyScalar(1.03);
                     smoke.material.opacity = 0.6 * (1 - frame / 30);
 
                     if (frame < 30) {
-                        animationId = requestAnimationFrame(animateSmoke);
+                        requestAnimationFrame(animateSmoke);
                     } else {
                         scene.remove(smoke);
                         smokeMat.dispose();
                     }
                 };
                 animateSmoke();
-                
-                // ✅ Регистрируем анимацию для очистки
-                activeAnimations.push({
-                    cancel: () => {
-                        if (animationId) cancelAnimationFrame(animationId);
-                        scene.remove(smoke);
-                        smokeMat.dispose();
-                    }
-                });
             }
         }
 
@@ -1683,16 +1970,7 @@
             scene.add(particles);
 
             let frame = 0;
-            let animationId;
             const animateExplosion = () => {
-                // ✅ ФИКС: Проверка состояния игры
-                if (state.gameCompleted || state.isCrashed) {
-                    scene.remove(particles);
-                    geometry.dispose();
-                    particleMat.dispose();
-                    return;
-                }
-
                 frame++;
                 const pos = particles.geometry.attributes.position.array;
                 for (let i = 0; i < particleCount; i++) {
@@ -1704,7 +1982,7 @@
                 particleMat.opacity = 1 - frame / 40;
 
                 if (frame < 40) {
-                    animationId = requestAnimationFrame(animateExplosion);
+                    requestAnimationFrame(animateExplosion);
                 } else {
                     scene.remove(particles);
                     geometry.dispose();
@@ -1719,20 +1997,8 @@
 
             setTimeout(() => {
                 scene.remove(lightFlash);
-                lightFlash.dispose();
+                // ✅ ИСПРАВЛЕНО: убран lightFlash.dispose()
             }, 300);
-
-            // ✅ Регистрируем анимацию для очистки
-            activeAnimations.push({
-                cancel: () => {
-                    if (animationId) cancelAnimationFrame(animationId);
-                    scene.remove(particles);
-                    geometry.dispose();
-                    particleMat.dispose();
-                    scene.remove(lightFlash);
-                    lightFlash.dispose();
-                }
-            });
         }
 
         function createShockwave(x, y, z) {
@@ -1747,39 +2013,25 @@
             scene.add(ring);
 
             let frame = 0;
-            let animationId;
             const animateRing = () => {
-                // ✅ ФИКС: Проверка состояния игры
-                if (state.gameCompleted || state.isCrashed) {
-                    scene.remove(ring);
-                    ringMat.dispose();
-                    return;
-                }
-
                 frame++;
                 const scale = 1 + frame * 0.3;
                 ring.scale.set(scale, scale, scale);
                 ring.material.opacity = 1 - frame / 25;
 
                 if (frame < 25) {
-                    animationId = requestAnimationFrame(animateRing);
+                    requestAnimationFrame(animateRing);
                 } else {
                     scene.remove(ring);
                     ringMat.dispose();
                 }
             };
             animateRing();
-
-            // ✅ Регистрируем анимацию для очистки
-            activeAnimations.push({
-                cancel: () => {
-                    if (animationId) cancelAnimationFrame(animationId);
-                    scene.remove(ring);
-                    ringMat.dispose();
-                }
-            });
         }
 
+        //============================================================
+        //============ КАМЕРА =========================================
+        //============================================================
         function updateCamera() {
             const targetPos = droneGroup.position.clone();
             const desiredPos = targetPos.clone().add(new THREE.Vector3(
@@ -1791,6 +2043,9 @@
             camera.lookAt(droneGroup.position);
         }
 
+        //============================================================
+        //============ ЭФФЕКТЫ ========================================
+        //============================================================
         function updatePropellers() {
             state.propAngle += 0.6;
             propellers.forEach(p => { 
@@ -1833,8 +2088,11 @@
                 dust.position.y += Math.sin(time * 0.001 + dust.userData.phase) * 0.002;
                 dust.position.x += Math.cos(time * 0.0005 + dust.userData.phase) * 0.001;
 
+                // ✅ ИСПРАВЛЕНО: ограничение по границам
                 if (dust.position.y > 4) dust.position.y = 0;
                 if (dust.position.y < 0) dust.position.y = 4;
+                if (dust.position.x > 10) dust.position.x = -10;
+                if (dust.position.x < -10) dust.position.x = 10;
             });
         }
 
@@ -1845,17 +2103,16 @@
             }
         }
 
+        //============================================================
+        //============ ГЛАВНЫЙ ЦИКЛ ===================================
+        //============================================================
         function animate(time) {
             state.animationId = requestAnimationFrame(animate);
-            
-            if (!state.isCrashed && !state.gameCompleted) {
-                handleMovement();
-                targets.forEach(t => { if (t.active) t.update(); });
-                updateTrail();
-            }
-            
+            handleMovement();
+            targets.forEach(t => { if (t.active) t.update(); });
             updatePropellers();
             updateCamera();
+            updateTrail();
             updateDust(time || 0);
             updateScreens(time || 0);
 
@@ -1866,6 +2123,9 @@
             renderer.render(scene, camera);
         }
 
+        //============================================================
+        //============ ОБРАБОТЧИКИ ====================================
+        //============================================================
         function handleResize() {
             if (!camera || !renderer) return;
             camera.aspect = window.innerWidth / window.innerHeight;
@@ -1873,26 +2133,39 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
+        function handleBlur() {
+            // ✅ ИСПРАВЛЕНО: сбрасываем нажатые клавиши при потере фокуса
+            state.keys = {};
+        }
+
         function setupEventListeners() {
             window.addEventListener('keydown', handleKeyDown);
             window.addEventListener('keyup', handleKeyUp);
             window.addEventListener('click', handleClick);
             window.addEventListener('resize', handleResize);
+            window.addEventListener('blur', handleBlur);
             document.getElementById('resetDroneBtn').addEventListener('click', resetExercise);
             document.getElementById('fullRestartBtn').addEventListener('click', fullGameRestart);
             document.getElementById('exitMenuBtn').addEventListener('click', exitToMenu);
-            document.getElementById('exitToMenuBtn').addEventListener('click', exitToMenu);
         }
 
+        //============================================================
+        //============ ОЧИСТКА ========================================
+        //============================================================
         window.addEventListener('beforeunload', () => {
             if (state.animationId) {
                 cancelAnimationFrame(state.animationId);
             }
-            clearActiveAnimations(); // ✅ Очистка всех анимаций
             window.removeEventListener('keydown', handleKeyDown);
             window.removeEventListener('keyup', handleKeyUp);
             window.removeEventListener('click', handleClick);
             window.removeEventListener('resize', handleResize);
+            window.removeEventListener('blur', handleBlur);
+            
+            // ✅ ИСПРАВЛЕНО: удаляем обработчики кнопок
+            document.getElementById('resetDroneBtn').removeEventListener('click', resetExercise);
+            document.getElementById('fullRestartBtn').removeEventListener('click', fullGameRestart);
+            document.getElementById('exitMenuBtn').removeEventListener('click', exitToMenu);
 
             if (audioCtx && audioCtx.state !== 'closed') {
                 try { audioCtx.close(); } catch (e) {}
@@ -1912,7 +2185,6 @@
             }
 
             Object.values(sharedGeometries).forEach(g => g && g.dispose());
-            Object.values(sharedMaterials).forEach(m => m && m.dispose());
 
             if (renderer) {
                 renderer.dispose();
