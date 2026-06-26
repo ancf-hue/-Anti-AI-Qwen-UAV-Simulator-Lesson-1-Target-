@@ -538,6 +538,14 @@
             margin-top: 20px; font-size: 14px;
             color: #88aaff;
         }
+        #webgl-error .retry-btn {
+            margin-top: 20px;
+            padding: 12px 40px;
+            background: linear-gradient(145deg, #ff6600, #cc4400);
+            border: none; border-radius: 30px;
+            color: white; font-size: 16px;
+            font-weight: bold; cursor: pointer;
+        }
 
         @media (max-width: 700px) {
             .logo-header { padding: 8px 12px; gap: 8px; }
@@ -587,13 +595,15 @@
     <div id="simulator-page">
         <div id="webgl-error">
             <h2>⚠️ WebGL не поддерживается</h2>
-            <p>Ваш браузер не поддерживает WebGL, необходимый для работы 3D-тренажёра.</p>
+            <p>Ваш браузер не поддерживает WebGL или не загрузилась библиотека Three.js.</p>
             <p class="hint">
                 Попробуйте:<br>
                 💡 • Обновить браузер до последней версии<br>
                 • Включить аппаратное ускорение в настройках браузера<br>
-                • Использовать Chrome, Firefox или Edge
+                • Использовать Chrome, Firefox или Edge<br>
+                • Отключить QUIC в настройках браузера
             </p>
+            <button class="retry-btn" onclick="location.reload()">🔄 Обновить страницу</button>
         </div>
 
         <div id="stats-panel">
@@ -662,1435 +672,1562 @@
         <source src="didzhey-theme.mp3" type="audio/mpeg">
     </audio>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- ============================================================ -->
+    <!-- ЗАГРУЗКА THREE.JS С МНОЖЕСТВЕННЫМИ FALLBACK -->
+    <!-- ============================================================ -->
     <script>
-        const LEVELS = {
-            easy: {
-                name: 'ЛЁГКИЙ',
-                color: '#48bb78',
-                droneSpeed: 0.09,
-                droneDrag: 0.94,
-                maxTilt: 0.35,
-                targetCount: 5,
-                targetSpeed: 0.012,
-                targetRadius: 2.5,
-                shootCooldown: 500,
-                collisionThreshold: 0.08,
-                crashThreshold: 0.2,
-                lessonText: '📡 ЗАДАНИЕ: Поразить 5 медленных мишеней'
-            },
-            medium: {
-                name: 'СРЕДНИЙ',
-                color: '#ecc94b',
-                droneSpeed: 0.11,
-                droneDrag: 0.94,
-                maxTilt: 0.4,
-                targetCount: 5,
-                targetSpeed: 0.018,
-                targetRadius: 3.5,
-                shootCooldown: 400,
-                collisionThreshold: 0.05,
-                crashThreshold: 0.15,
-                lessonText: '📡 ЗАДАНИЕ: Поразить 5 движущихся мишеней'
-            },
-            hard: {
-                name: 'СЛОЖНЫЙ',
-                color: '#e53e3e',
-                droneSpeed: 0.14,
-                droneDrag: 0.95,
-                maxTilt: 0.5,
-                targetCount: 7,
-                targetSpeed: 0.028,
-                targetRadius: 4.5,
-                shootCooldown: 300,
-                collisionThreshold: 0.03,
-                crashThreshold: 0.1,
-                lessonText: '📡 ЗАДАНИЕ: Поразить 7 быстрых мишеней!'
-            }
-        };
-
-        const CONFIG = {
-            DRONE_HOVER_Y: 1.25,
-            DRONE_HOVER_AMP: 0.03,
-            DRONE_HOVER_FREQ: 0.0012,
-            LIMIT_X: 10.2,
-            LIMIT_Z: 8.5,
-            MIN_X: -10.2,
-            MIN_Z: -8.2,
-            GROUND_Y: -0.45,
-            GRAVITY: 0.015,
-            BOUNCE_FACTOR: 0.6,
-            CAMERA_OFFSET: { x: 0, y: 3, z: 8 },
-            CAMERA_LERP: 0.09,
-            LOW_END_CORES: 4,
-            MAX_PIXEL_RATIO: 2,
-            DUST_COUNT_HIGH: 50,
-            DUST_COUNT_LOW: 20,
-            PARTICLE_COUNT_HIGH: 50,
-            PARTICLE_COUNT_LOW: 20,
-            TRAIL_LENGTH: 20
-        };
-
-        let currentLevel = null;
-
-        const state = {
-            keys: {},
-            pitch: 0,
-            roll: 0,
-            velocity: { x: 0, z: 0 },
-            verticalVelocity: 0,
-            isCrashed: false,
-            destroyedCount: 0,
-            canShoot: true,
-            propAngle: 0,
-            trailIndex: 0,
-            trailTimer: 0,
-            animationId: null,
-            simulatorInitialized: false,
-            gameCompleted: false
-        };
-
-        let scene, camera, renderer, droneGroup;
-        let propellers = [];
-        let trailParticles = [];
-        let dustParticles = [];
-        let screens = [];
-        let targets = [];
-        let gridHelper;
-        let isLowEnd = false;
-        let lastStabilityValue = 100;
-
-        const sharedGeometries = {};
-
-        const levelButtons = document.querySelectorAll('.level-btn');
-        const startBtn = document.getElementById('startBtn');
-
-        levelButtons.forEach(btn => {
-            btn.addEventListener('click', () => {
-                levelButtons.forEach(b => b.classList.remove('selected'));
-                btn.classList.add('selected');
-                currentLevel = btn.dataset.level;
-                startBtn.classList.add('enabled');
-                ensureAudio();
-            });
-        });
-
-        (function setupFavicon() {
-            const img = document.getElementById('logoImg');
-            const fallbackSVG = 'data:image/svg+xml;utf8,' + encodeURIComponent(
-                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' +
-                '<rect width="100" height="100" rx="20" fill="#00ccff"/>' +
-                '<text x="50" y="70" font-size="60" text-anchor="middle" fill="white">🚁</text>' +
-                '</svg>'
-            );
-            let tried = false;
-            img.onerror = function() {
-                if (!tried) {
-                    tried = true;
-                    img.src = fallbackSVG;
-                } else {
-                    img.onerror = null;
-                }
-            };
-        })();
-
-        function copyPhone() {
-            const phone = document.getElementById('phoneNumber').textContent;
-            const btn = document.getElementById('copyPhoneBtn');
-            if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) {
-                navigator.clipboard.writeText(phone)
-                    .then(() => showCopySuccess(btn))
-                    .catch(() => fallbackCopy(phone, btn));
-            } else {
-                fallbackCopy(phone, btn);
-            }
-        }
-
-        function fallbackCopy(text, btn) {
-            const ta = document.createElement('textarea');
-            ta.value = text;
-            ta.style.position = 'fixed';
-            ta.style.opacity = '0';
-            ta.style.left = '-9999px';
-            document.body.appendChild(ta);
-            ta.focus();
-            ta.select();
-            try {
-                document.execCommand('copy');
-                showCopySuccess(btn);
-            } catch (e) {
-                alert('Номер для связи: ' + text);
-            }
-            document.body.removeChild(ta);
-        }
-
-        function showCopySuccess(btn) {
-            btn.classList.add('copied');
-            btn.innerText = '✅ Скопировано!';
-            setTimeout(() => {
-                btn.classList.remove('copied');
-                btn.innerText = '📋 Копировать';
-            }, 2000);
-        }
-
-        document.getElementById('copyPhoneBtn').addEventListener('click', copyPhone);
-
-        startBtn.addEventListener('click', startSimulator);
-
-        function startSimulator() {
-            if (!currentLevel) {
-                showNotification('⚠️ Сначала выберите уровень сложности!', 'info');
-                return;
-            }
-            const music = document.getElementById('bg-music');
-            music.volume = 0.4;
-            music.play().catch(e => console.log('🎵 Автозапуск музыки заблокирован:', e.message));
-            document.getElementById('intro-page').classList.add('hidden');
-            setTimeout(() => {
-                document.getElementById('simulator-page').classList.add('active');
-                if (!state.simulatorInitialized) {
-                    initSimulator();
-                } else {
-                    fullGameRestart();
-                }
-            }, 800);
-        }
-
-        function exitToMenu() {
-            document.getElementById('victoryModal').classList.remove('show');
-            document.getElementById('simulator-page').classList.remove('active');
-            setTimeout(() => {
-                document.getElementById('intro-page').classList.remove('hidden');
-            }, 300);
-            state.gameCompleted = false;
-            state.destroyedCount = 0;
-            state.isCrashed = false;
-            state.velocity = { x: 0, z: 0 };
-            state.verticalVelocity = 0;
-            state.pitch = 0;
-            state.roll = 0;
-            state.canShoot = true;
-            levelButtons.forEach(b => b.classList.remove('selected'));
-            currentLevel = null;
-            startBtn.classList.remove('enabled');
-            const music = document.getElementById('bg-music');
-            music.pause();
-            music.currentTime = 0;
-            showNotification('🏠 Возврат в главное меню', 'info');
-        }
-
-        let audioCtx = null;
-        let audioHintShown = false;
-
-        function ensureAudio() {
-            if (!audioCtx) {
-                try {
-                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                } catch (e) {
-                    return false;
-                }
-            }
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume().catch(() => {});
-            }
-            return true;
-        }
-
-        function playSound(freq, duration, type = 'square', volume = 0.08) {
-            if (!ensureAudio()) return;
-            try {
-                const now = audioCtx.currentTime;
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.type = type;
-                osc.frequency.value = freq;
-                gain.gain.setValueAtTime(volume, now);
-                gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-                osc.start(now);
-                osc.stop(now + duration);
-            } catch (e) {}
-        }
-
-        const SFX = {
-            shoot: () => {
-                playSound(800, 0.08, 'square', 0.1);
-                playSound(400, 0.15, 'sawtooth', 0.05);
-            },
-            hit: () => {
-                playSound(600, 0.1, 'sine', 0.15);
-                setTimeout(() => playSound(900, 0.15, 'sine', 0.1), 50);
-                setTimeout(() => playSound(1200, 0.2, 'sine', 0.08), 100);
-            },
-            explosion: () => {
-                playSound(100, 0.3, 'sawtooth', 0.2);
-                playSound(60, 0.4, 'square', 0.15);
-            },
-            collision: () => {
-                playSound(150, 0.15, 'square', 0.15);
-                playSound(80, 0.2, 'sawtooth', 0.1);
-            },
-            crash: () => {
-                playSound(80, 0.5, 'sawtooth', 0.25);
-                playSound(50, 0.6, 'square', 0.2);
-                setTimeout(() => playSound(40, 0.4, 'triangle', 0.15), 200);
-            },
-            victory: () => {
-                playSound(523, 0.15, 'sine', 0.12);
-                setTimeout(() => playSound(659, 0.15, 'sine', 0.12), 150);
-                setTimeout(() => playSound(784, 0.15, 'sine', 0.12), 300);
-                setTimeout(() => playSound(1047, 0.3, 'sine', 0.15), 450);
-            },
-            stabilize: () => playSound(400, 0.1, 'triangle', 0.08)
-        };
-
-        let notifTimeout = null;
-
-        function showNotification(text, type = '') {
-            const n = document.getElementById('notification');
-            n.innerText = text;
-            n.className = 'show ' + type;
-            if (notifTimeout) clearTimeout(notifTimeout);
-            notifTimeout = setTimeout(() => n.className = '', 2000);
-        }
-
-        function showVictoryModal() {
-            if (state.gameCompleted) return;
-            state.gameCompleted = true;
-            const stability = document.getElementById('stability').innerText;
-            const total = LEVELS[currentLevel].targetCount;
-            document.getElementById('victoryHits').innerText = state.destroyedCount;
-            document.getElementById('victoryTotal').innerText = total;
-            document.getElementById('victoryStability').innerText = stability;
-            const modal = document.getElementById('victoryModal');
-            modal.classList.add('show');
-            SFX.victory();
-            showNotification(`✅ УРОВЕНЬ "${LEVELS[currentLevel].name}" ПРОЙДЕН!`, 'success');
-        }
-
-        function resetTrailParticles() {
-            trailParticles.forEach(p => {
-                p.visible = false;
-                p.scale.set(1, 1, 1);
-                if (p.userData) p.userData.life = 0;
-            });
-        }
-
-        function fullGameRestart() {
-            document.getElementById('victoryModal').classList.remove('show');
-            state.gameCompleted = false;
-            state.destroyedCount = 0;
-            state.isCrashed = false;
-            state.velocity = { x: 0, z: 0 };
-            state.verticalVelocity = 0;
-            state.pitch = 0;
-            state.roll = 0;
-            state.canShoot = true;
-            state.trailIndex = 0;
-            state.trailTimer = 0;
-
-            const total = LEVELS[currentLevel].targetCount;
-            document.getElementById('hits').innerText = '0';
-            document.getElementById('target-counter').innerText = '0';
-            document.getElementById('target-total').innerText = total;
-            document.getElementById('stability').innerText = '100';
-            document.getElementById('levelLabel').innerText = `Уровень: ${LEVELS[currentLevel].name}`;
-            document.getElementById('lessonBadge').innerText = LEVELS[currentLevel].lessonText;
-
-            if (droneGroup) {
-                droneGroup.position.set(0, CONFIG.DRONE_HOVER_Y, 0);
-                droneGroup.rotation.x = 0;
-                droneGroup.rotation.y = 0;
-                droneGroup.rotation.z = 0;
-            }
-
-            targets.forEach(t => {
-                if (t.group && t.group.parent) t.group.parent.remove(t.group);
-            });
-            targets = [];
-            setupTargets();
-
-            resetTrailParticles();
-            showNotification(`🔄 Уровень "${LEVELS[currentLevel].name}" перезапущен!`, 'success');
-        }
-
-        function resetExercise() {
-            if (state.gameCompleted) {
-                fullGameRestart();
-                return;
-            }
-            state.destroyedCount = 0;
-            state.isCrashed = false;
-            state.velocity = { x: 0, z: 0 };
-            state.verticalVelocity = 0;
-            state.pitch = 0;
-            state.roll = 0;
-            state.canShoot = true;
-            state.trailIndex = 0;
-            state.trailTimer = 0;
-
-            document.getElementById('hits').innerText = '0';
-            document.getElementById('target-counter').innerText = '0';
-            document.getElementById('stability').innerText = '100';
-
-            targets.forEach(t => t.reset());
-
-            droneGroup.position.set(0, CONFIG.DRONE_HOVER_Y, 0);
-            droneGroup.rotation.x = 0;
-            droneGroup.rotation.y = 0;
-            droneGroup.rotation.z = 0;
-
-            resetTrailParticles();
-            showNotification("🔄 Упражнение перезапущено", 'success');
-        }
-
-        function initSimulator() {
-            console.log('🚁 Инициализация тренажёра...');
-            if (typeof THREE === 'undefined') {
-                console.error('❌ Three.js не загружен!');
-                document.getElementById('webgl-error').classList.add('show');
-                return;
-            }
-            if (!checkWebGL()) {
-                document.getElementById('webgl-error').classList.add('show');
-                return;
-            }
-
-            sharedGeometries.smoke = new THREE.SphereGeometry(0.12, 6, 6);
-            sharedGeometries.flash = new THREE.SphereGeometry(0.25, 8, 8);
-            sharedGeometries.ring = new THREE.RingGeometry(0.1, 0.2, 32);
-
-            setupScene();
-            setupLights();
-            setupFloor();
-            setupWalls();
-            setupDrone();
-            setupTrail();
-            setupDust();
-            setupTargets();
-            setupEventListeners();
-
-            applyLevelSettings();
-
-            state.simulatorInitialized = true;
-
-            setTimeout(() => {
-                if (!audioCtx || audioCtx.state === 'suspended') {
-                    if (!audioHintShown) {
-                        showNotification("🎵 Нажмите на экран для активации звука", 'info');
-                        audioHintShown = true;
-                    }
-                }
-            }, 1500);
-
-            animate();
-            console.log(`✅ Тренажёр запущен. Уровень: ${LEVELS[currentLevel].name}`);
-        }
-
-        function applyLevelSettings() {
-            const level = LEVELS[currentLevel];
-            const total = level.targetCount;
-            document.getElementById('target-total').innerText = total;
-            document.getElementById('levelLabel').innerText = `Уровень: ${level.name}`;
-            document.getElementById('lessonBadge').innerText = level.lessonText;
-            
-            const statsPanel = document.getElementById('stats-panel');
-            statsPanel.style.borderLeftColor = level.color;
-            statsPanel.style.boxShadow = `0 0 20px ${level.color}40`;
-        }
-
+        // Проверка WebGL
         function checkWebGL() {
             try {
                 const canvas = document.createElement('canvas');
-                const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl') ||
-                           canvas.getContext('webkit-3d') || canvas.getContext('moz-webgl');
-                if (!gl) {
-                    console.warn('⚠️ WebGL контекст не получен');
-                    return false;
-                }
+                const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                if (!gl) return false;
                 return true;
-            } catch (e) {
-                console.error('❌ Ошибка проверки WebGL:', e);
+            } catch(e) {
                 return false;
             }
         }
 
-        function setupScene() {
-            scene = new THREE.Scene();
-            scene.background = null;
-            scene.fog = new THREE.FogExp2(0x050b1a, 0.015);
+        if (!checkWebGL()) {
+            document.getElementById('webgl-error').classList.add('show');
+            document.getElementById('webgl-error').innerHTML = `
+                <h2>⚠️ WebGL не поддерживается</h2>
+                <p>Ваш браузер не поддерживает WebGL, необходимый для работы 3D-тренажёра.</p>
+                <p class="hint">
+                    Попробуйте:<br>
+                    💡 • Обновить браузер до последней версии<br>
+                    • Включить аппаратное ускорение в настройках браузера<br>
+                    • Использовать Chrome, Firefox или Edge
+                </p>
+                <button class="retry-btn" onclick="location.reload()">🔄 Обновить страницу</button>
+            `;
+        }
 
-            camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(6, 5, 9);
+        // Функция проверки загрузки Three.js
+        function checkThreeJS() {
+            if (typeof THREE !== 'undefined' && THREE.WebGLRenderer) {
+                console.log('✅ Three.js загружен успешно');
+                return true;
+            }
+            return false;
+        }
 
-            isLowEnd = (navigator.hardwareConcurrency || 4) < CONFIG.LOW_END_CORES;
-            const pixelRatio = isLowEnd ? 1 : Math.min(window.devicePixelRatio, CONFIG.MAX_PIXEL_RATIO);
+        // Показ ошибки
+        function showThreeError() {
+            const errorEl = document.getElementById('webgl-error');
+            errorEl.classList.add('show');
+            errorEl.innerHTML = `
+                <h2>⚠️ Ошибка загрузки Three.js</h2>
+                <p>Не удалось загрузить библиотеку Three.js.</p>
+                <p class="hint">
+                    Попробуйте:<br>
+                    💡 • Проверить интернет-соединение<br>
+                    • Отключить VPN/прокси<br>
+                    • Отключить QUIC в браузере (chrome://flags/#enable-quic)<br>
+                    • Использовать другой браузер
+                </p>
+                <button class="retry-btn" onclick="location.reload()">🔄 Обновить страницу</button>
+            `;
+            document.querySelector('.difficulty-selector').style.opacity = '0.3';
+            document.querySelector('.difficulty-selector').style.pointerEvents = 'none';
+        }
 
-            try {
-                renderer = new THREE.WebGLRenderer({ antialias: !isLowEnd, alpha: true });
-            } catch (e) {
-                console.error('❌ Не удалось создать WebGL рендерер:', e);
+        // Проверяем через 2 секунды
+        setTimeout(function() {
+            if (!checkThreeJS()) {
+                showThreeError();
+            }
+        }, 3000);
+    </script>
+
+    <!-- Первый способ: CDN с отключением QUIC -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" 
+            onerror="this.onerror=null;this.src='https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';">
+    </script>
+
+    <!-- Второй способ: другой CDN -->
+    <script>
+        if (typeof THREE === 'undefined') {
+            console.log('⚠️ Первый CDN не сработал, пробуем второй...');
+            document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"><\/script>');
+        }
+    </script>
+
+    <!-- Третий способ: ещё один CDN -->
+    <script>
+        if (typeof THREE === 'undefined') {
+            console.log('⚠️ Второй CDN не сработал, пробуем третий...');
+            document.write('<script src="https://unpkg.com/three@0.128.0/build/three.min.js"><\/script>');
+        }
+    </script>
+
+    <!-- Четвёртый способ: Google CDN -->
+    <script>
+        if (typeof THREE === 'undefined') {
+            console.log('⚠️ Третий CDN не сработал, пробуем Google...');
+            document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>');
+        }
+    </script>
+
+    <!-- Проверка после всех загрузок -->
+    <script>
+        (function() {
+            let attempts = 0;
+            const maxAttempts = 10;
+            
+            function checkAndRetry() {
+                attempts++;
+                if (typeof THREE !== 'undefined' && THREE.WebGLRenderer) {
+                    console.log('✅ Three.js загружен!');
+                    document.getElementById('webgl-error').classList.remove('show');
+                    return;
+                }
+                
+                if (attempts < maxAttempts) {
+                    setTimeout(checkAndRetry, 500);
+                } else {
+                    console.error('❌ Three.js не загружен после всех попыток');
+                    showThreeError();
+                }
+            }
+            
+            setTimeout(checkAndRetry, 1000);
+        })();
+    </script>
+
+    <!-- ============================================================ -->
+    <!-- ОСНОВНОЙ КОД ИГРЫ -->
+    <!-- ============================================================ -->
+    <script>
+        // ============================================================
+        // ОСНОВНОЙ СКРИПТ
+        // ============================================================
+
+        (function() {
+            'use strict';
+
+            // Проверка THREE
+            if (typeof THREE === 'undefined') {
+                console.error('THREE не определен, игра не может запуститься');
                 document.getElementById('webgl-error').classList.add('show');
-                throw e;
-            }
-
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(pixelRatio);
-            renderer.setClearColor(0x050b1a, 0);
-            renderer.shadowMap.enabled = !isLowEnd;
-            if (!isLowEnd) {
-                renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-            }
-            renderer.toneMapping = THREE.ACESFilmicToneMapping;
-            renderer.toneMappingExposure = 1.2;
-
-            const simPage = document.getElementById('simulator-page');
-            simPage.insertBefore(renderer.domElement, simPage.firstChild);
-            renderer.domElement.style.position = 'fixed';
-            renderer.domElement.style.top = '0';
-            renderer.domElement.style.left = '0';
-            renderer.domElement.style.zIndex = '1';
-        }
-
-        function setupLights() {
-            scene.add(new THREE.AmbientLight(0x303050, 0.6));
-
-            const mainLight = new THREE.DirectionalLight(0xffffff, 1.0);
-            mainLight.position.set(5, 12, 6);
-            if (!isLowEnd) {
-                mainLight.castShadow = true;
-                mainLight.shadow.mapSize.width = 1024;
-                mainLight.shadow.mapSize.height = 1024;
-                mainLight.shadow.camera.near = 0.5;
-                mainLight.shadow.camera.far = 50;
-            }
-            scene.add(mainLight);
-
-            const blueLight = new THREE.PointLight(0x00ccff, 1.5, 20);
-            blueLight.position.set(-8, 4, -5);
-            scene.add(blueLight);
-
-            const orangeLight = new THREE.PointLight(0xff6600, 1.2, 20);
-            orangeLight.position.set(8, 4, -5);
-            scene.add(orangeLight);
-
-            const greenLight = new THREE.PointLight(0x00ff88, 0.8, 15);
-            greenLight.position.set(0, 3, 5);
-            scene.add(greenLight);
-        }
-
-        function setupFloor() {
-            const floorMat = new THREE.MeshStandardMaterial({
-                color: 0x1a2a3a, roughness: 0.6, metalness: 0.3
-            });
-            const floorPlane = new THREE.Mesh(new THREE.PlaneGeometry(22, 20), floorMat);
-            floorPlane.rotation.x = -Math.PI / 2;
-            floorPlane.position.y = -0.5;
-            if (!isLowEnd) floorPlane.receiveShadow = true;
-            scene.add(floorPlane);
-
-            gridHelper = new THREE.GridHelper(24, 24, 0x00ccff, 0x003366);
-            gridHelper.position.y = -0.45;
-            gridHelper.material.transparent = true;
-            gridHelper.material.opacity = 0.6;
-            scene.add(gridHelper);
-
-            const gridHelper2 = new THREE.GridHelper(24, 48, 0x0066aa, 0x001133);
-            gridHelper2.position.y = -0.44;
-            gridHelper2.material.transparent = true;
-            gridHelper2.material.opacity = 0.3;
-            scene.add(gridHelper2);
-        }
-
-        function setupWalls() {
-            const wallMat = new THREE.MeshStandardMaterial({
-                color: 0x2c3e4e, roughness: 0.3, metalness: 0.2,
-                transparent: true, opacity: 0.75
-            });
-
-            const backWall = new THREE.Mesh(new THREE.BoxGeometry(24, 5, 0.5), wallMat);
-            backWall.position.set(0, 1.8, -9.5);
-            if (!isLowEnd) backWall.receiveShadow = true;
-            scene.add(backWall);
-
-            const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.5, 5, 20), wallMat);
-            leftWall.position.set(-11, 1.8, 0);
-            scene.add(leftWall);
-
-            const rightWall = new THREE.Mesh(new THREE.BoxGeometry(0.5, 5, 20), wallMat);
-            rightWall.position.set(11, 1.8, 0);
-            scene.add(rightWall);
-
-            const frontBar = new THREE.Mesh(new THREE.BoxGeometry(22, 1, 0.8), wallMat);
-            frontBar.position.set(0, 0.2, 9);
-            scene.add(frontBar);
-
-            const screenGeo = new THREE.PlaneGeometry(1.5, 1);
-            const screenMat = new THREE.MeshStandardMaterial({
-                color: 0x00ccff, emissive: 0x0066aa, emissiveIntensity: 0.8,
-                transparent: true, opacity: 0.9
-            });
-            for (let i = -3; i <= 3; i += 2) {
-                const screen = new THREE.Mesh(screenGeo, screenMat);
-                screen.position.set(i * 1.5, 2.5, -9.2);
-                scene.add(screen);
-                screens.push(screen);
-            }
-
-            const metalMat = new THREE.MeshStandardMaterial({
-                color: 0xaa9977, metalness: 0.9, roughness: 0.2
-            });
-            for (let i = -6; i <= 6; i += 2.5) {
-                const pillar = new THREE.Mesh(
-                    new THREE.CylinderGeometry(0.2, 0.3, 2.2, 8), metalMat
-                );
-                pillar.position.set(i, -0.3, -7);
-                if (!isLowEnd) pillar.castShadow = true;
-                scene.add(pillar);
-            }
-        }
-
-        function setupDrone() {
-            droneGroup = new THREE.Group();
-            scene.add(droneGroup);
-            droneGroup.position.set(0, CONFIG.DRONE_HOVER_Y, 0);
-
-            propellers = [];
-
-            const carbonMat = new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.6, metalness: 0.8 });
-            const goldMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.15, metalness: 0.9 });
-            const titaniumMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.3, metalness: 0.7 });
-            const neonPropMat = new THREE.MeshStandardMaterial({ color: 0x00ffcc, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.7 });
-            const plasticMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5, metalness: 0.2 });
-            const lensMat = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.05, metalness: 1.0 });
-            const pcbMat = new THREE.MeshStandardMaterial({ color: 0x0f3d0f, roughness: 0.5, metalness: 0.2 });
-
-            const bottomPlate = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.015, 0.45), carbonMat);
-            bottomPlate.position.y = -0.03;
-            bottomPlate.castShadow = true;
-            droneGroup.add(bottomPlate);
-
-            const topPlate = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.015, 0.35), carbonMat);
-            topPlate.position.y = 0.05;
-            topPlate.castShadow = true;
-            droneGroup.add(topPlate);
-
-            const standoffGeo = new THREE.CylinderGeometry(0.01, 0.01, 0.065, 8);
-            const standoffPositions = [
-                {x: 0.07, z: 0.15}, {x: -0.07, z: 0.15},
-                {x: 0.07, z: -0.15}, {x: -0.07, z: -0.15}
-            ];
-            standoffPositions.forEach(pos => {
-                const pillar = new THREE.Mesh(standoffGeo, titaniumMat);
-                pillar.position.set(pos.x, 0.01, pos.z);
-                droneGroup.add(pillar);
-            });
-
-            const pcb = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.01, 0.12), pcbMat);
-            pcb.position.set(0, 0.01, 0);
-            droneGroup.add(pcb);
-            
-            const heatsink = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.015, 0.1), titaniumMat);
-            heatsink.position.set(0, 0.02, 0);
-            droneGroup.add(heatsink);
-
-            const armPositions = [
-                { x: 0.26, z: 0.26, angle: -Math.PI / 4 },
-                { x: -0.26, z: 0.26, angle: Math.PI / 4 },
-                { x: 0.26, z: -0.26, angle: Math.PI / 4 },
-                { x: -0.26, z: -0.26, angle: -Math.PI / 4 }
-            ];
-
-            armPositions.forEach((pos, index) => {
-                const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.36, 8), carbonMat);
-                arm.position.set(pos.x / 2, 0.01, pos.z / 2);
-                arm.rotation.z = Math.PI / 2;
-                arm.rotation.y = pos.angle;
-                arm.castShadow = true;
-                droneGroup.add(arm);
-
-                const motorGroup = new THREE.Group();
-                motorGroup.position.set(pos.x, 0.03, pos.z);
-
-                const motorBase = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.04, 12), titaniumMat);
-                motorBase.castShadow = true;
-                motorGroup.add(motorBase);
-
-                const motorBell = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.042, 0.03, 12), goldMat);
-                motorBell.position.y = 0.025;
-                motorBell.castShadow = true;
-                motorGroup.add(motorBell);
-
-                droneGroup.add(motorGroup);
-
-                const guardGeo = new THREE.TorusGeometry(0.15, 0.01, 8, 24);
-                const guard = new THREE.Mesh(guardGeo, plasticMat);
-                guard.rotation.x = Math.PI / 2;
-                guard.position.set(pos.x, 0.06, pos.z);
-                droneGroup.add(guard);
-
-                const guardStrut = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.01, 0.02), plasticMat);
-                guardStrut.position.set(pos.x - (pos.x * 0.15), 0.04, pos.z - (pos.z * 0.15));
-                guardStrut.rotation.y = pos.angle;
-                droneGroup.add(guardStrut);
-
-                const led = new THREE.Mesh(new THREE.SphereGeometry(0.015, 8, 8), new THREE.MeshBasicMaterial({ color: (index < 2) ? 0x00ff00 : 0xff0000 }));
-                led.position.set(pos.x, -0.02, pos.z);
-                droneGroup.add(led);
-
-                const propGroup = new THREE.Group();
-                propGroup.position.set(pos.x, 0.075, pos.z);
-
-                const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.02, 8), titaniumMat);
-                propGroup.add(hub);
-                const nut = new THREE.Mesh(new THREE.ConeGeometry(0.01, 0.015, 6), goldMat);
-                nut.position.y = 0.015;
-                propGroup.add(nut);
-
-                for (let i = 0; i < 3; i++) {
-                    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.006, 0.022), neonPropMat);
-                    blade.position.set(0, 0.005, 0);
-                    blade.geometry.translate(0.06, 0, 0);
-                    blade.rotation.x = 0.15; 
-                    blade.rotation.y = (Math.PI * 2 / 3) * i;
-                    propGroup.add(blade);
-                }
-
-                droneGroup.add(propGroup);
-                propellers.push(propGroup);
-            });
-
-            const cameraGroup = new THREE.Group();
-            cameraGroup.position.set(0, 0.01, 0.22);
-
-            const mountGeo = new THREE.BoxGeometry(0.01, 0.08, 0.08);
-            const leftMount = new THREE.Mesh(mountGeo, titaniumMat);
-            leftMount.position.x = -0.06;
-            const rightMount = leftMount.clone();
-            rightMount.position.x = 0.06;
-            cameraGroup.add(leftMount, rightMount);
-
-            const camBodyGroup = new THREE.Group();
-            camBodyGroup.rotation.x = -0.25;
-
-            const camBody = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.07, 0.07), plasticMat);
-            camBody.castShadow = true;
-            camBodyGroup.add(camBody);
-
-            const lensRing = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.04, 12), titaniumMat);
-            lensRing.rotation.x = Math.PI / 2;
-            lensRing.position.set(0, 0, 0.04);
-            camBodyGroup.add(lensRing);
-
-            const lensGlass = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.005, 12), lensMat);
-            lensGlass.rotation.x = Math.PI / 2;
-            lensGlass.position.set(0, 0, 0.061);
-            camBodyGroup.add(lensGlass);
-
-            cameraGroup.add(camBodyGroup);
-            droneGroup.add(cameraGroup);
-
-            const battery = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.06, 0.18), plasticMat);
-            battery.position.set(0, 0.09, -0.05);
-            battery.castShadow = true;
-            droneGroup.add(battery);
-
-            const strap = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.062, 0.04), new THREE.MeshStandardMaterial({ color: 0xddaa00, roughness: 0.9 }));
-            strap.position.set(0, 0.09, -0.05);
-            droneGroup.add(strap);
-
-            const antennaGroup = new THREE.Group();
-            antennaGroup.position.set(0, 0.06, -0.2);
-
-            const antennaCable = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.12, 6), titaniumMat);
-            antennaCable.rotation.x = -Math.PI / 4;
-            antennaCable.position.set(0, 0.04, -0.04);
-            antennaGroup.add(antennaCable);
-
-            const antennaHead = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.025, 10), plasticMat);
-            antennaHead.position.set(0, 0.08, -0.08);
-            antennaGroup.add(antennaHead);
-
-            droneGroup.add(antennaGroup);
-
-            const footGeo = new THREE.BoxGeometry(0.03, 0.05, 0.03);
-            armPositions.forEach(pos => {
-                const foot = new THREE.Mesh(footGeo, plasticMat);
-                foot.position.set(pos.x, -0.015, pos.z);
-                droneGroup.add(foot);
-            });
-
-            const droneLight = new THREE.PointLight(0x00ccff, 1.5, 4);
-            droneLight.position.set(0, -0.03, 0);
-            droneGroup.add(droneLight);
-        }
-
-        function setupTrail() {
-            for (let i = 0; i < CONFIG.TRAIL_LENGTH; i++) {
-                const particle = new THREE.Mesh(
-                    new THREE.SphereGeometry(0.08 * (1 - i / CONFIG.TRAIL_LENGTH), 6, 6),
-                    new THREE.MeshBasicMaterial({
-                        color: 0x00ffff,
-                        transparent: true,
-                        opacity: 0.5 * (1 - i / CONFIG.TRAIL_LENGTH)
-                    })
-                );
-                particle.visible = false;
-                particle.userData.life = 0;
-                particle.userData.baseOpacity = 0.5 * (1 - i / CONFIG.TRAIL_LENGTH);
-                scene.add(particle);
-                trailParticles.push(particle);
-            }
-        }
-
-        function setupDust() {
-            const dustCount = isLowEnd ? CONFIG.DUST_COUNT_LOW : CONFIG.DUST_COUNT_HIGH;
-            const dustGeo = new THREE.SphereGeometry(0.03, 4, 4);
-            const dustMat = new THREE.MeshBasicMaterial({
-                color: 0x88aaff, transparent: true, opacity: 0.4
-            });
-            for (let i = 0; i < dustCount; i++) {
-                const dust = new THREE.Mesh(dustGeo, dustMat);
-                dust.position.set(
-                    (Math.random() - 0.5) * 20,
-                    Math.random() * 4,
-                    (Math.random() - 0.5) * 18
-                );
-                dust.userData = {
-                    speed: 0.002 + Math.random() * 0.003,
-                    phase: Math.random() * Math.PI * 2
-                };
-                scene.add(dust);
-                dustParticles.push(dust);
-            }
-        }
-
-        function setupTargets() {
-            class MovingTarget {
-                constructor(scene, x, z) {
-                    this.group = new THREE.Group();
-                    this.startX = x;
-                    this.startZ = z;
-                    this.active = false;
-                    this.time = 0;
-                    this.angleX = 0;
-                    this.angleZ = 0;
-                    this.radiusX = 0;
-                    this.radiusZ = 0;
-                    this.speed = 0;
-
-                    const base = new THREE.Mesh(
-                        new THREE.CylinderGeometry(0.7, 0.8, 0.3, 20),
-                        new THREE.MeshStandardMaterial({
-                            color: 0xdd3333, emissive: 0x331100,
-                            metalness: 0.5, roughness: 0.4
-                        })
-                    );
-                    if (!isLowEnd) base.castShadow = true;
-                    this.group.add(base);
-
-                    this.middleRing = new THREE.Mesh(
-                        new THREE.TorusGeometry(0.45, 0.05, 8, 24),
-                        new THREE.MeshStandardMaterial({
-                            color: 0xffaa44, emissive: 0x664400,
-                            emissiveIntensity: 0.8
-                        })
-                    );
-                    this.middleRing.rotation.x = Math.PI / 2;
-                    this.middleRing.position.y = 0.2;
-                    this.group.add(this.middleRing);
-
-                    this.bullseye = new THREE.Mesh(
-                        new THREE.CylinderGeometry(0.18, 0.18, 0.32, 16),
-                        new THREE.MeshStandardMaterial({
-                            color: 0xffff00, emissive: 0x886600,
-                            emissiveIntensity: 1.2
-                        })
-                    );
-                    this.bullseye.position.y = 0.18;
-                    this.group.add(this.bullseye);
-
-                    this.glow = new THREE.Mesh(
-                        new THREE.RingGeometry(0.75, 0.9, 32),
-                        new THREE.MeshBasicMaterial({
-                            color: 0xff5500, transparent: true,
-                            opacity: 0.5, side: THREE.DoubleSide
-                        })
-                    );
-                    this.glow.rotation.x = -Math.PI / 2;
-                    this.glow.position.y = 0.05;
-                    this.group.add(this.glow);
-
-                    this.light = new THREE.PointLight(0xff5500, 0.8, 3);
-                    this.light.position.y = 0.5;
-                    this.group.add(this.light);
-
-                    this.group.position.set(x, CONFIG.DRONE_HOVER_Y, z);
-                    scene.add(this.group);
-                    this.reset();
-                }
-
-                update() {
-                    if (!this.active) return;
-                    this.time += 0.05;
-                    this.angleX += this.speed;
-                    this.angleZ += this.speed * 0.7;
-
-                    const newX = this.startX + Math.sin(this.angleX) * this.radiusX;
-                    const newZ = this.startZ + Math.cos(this.angleZ) * this.radiusZ;
-
-                    this.group.position.x = Math.min(9.5, Math.max(-9.5, newX));
-                    this.group.position.z = Math.min(7.5, Math.max(-8, newZ));
-                    
-                    // ✅ ИСПРАВЛЕНО: мишени летают на высоте дрона
-                    this.group.position.y = CONFIG.DRONE_HOVER_Y + Math.sin(this.time * 0.5) * 0.3;
-
-                    this.middleRing.rotation.z += 0.05;
-                    this.bullseye.scale.setScalar(1 + Math.sin(this.time) * 0.1);
-                    this.glow.rotation.z += 0.02;
-                    this.glow.material.opacity = 0.3 + Math.sin(this.time * 2) * 0.2;
-                    this.light.intensity = 0.6 + Math.sin(this.time * 3) * 0.3;
-                }
-
-                hit() {
-                    if (!this.active) return false;
-                    this.active = false;
-                    this.group.visible = false;
-                    return true;
-                }
-
-                reset() {
-                    this.active = true;
-                    this.group.visible = true;
-                    this.group.position.set(this.startX, CONFIG.DRONE_HOVER_Y, this.startZ);
-                    this.angleX = Math.random() * Math.PI * 2;
-                    this.angleZ = Math.random() * Math.PI * 2;
-                    const level = LEVELS[currentLevel];
-                    this.radiusX = level.targetRadius * (0.8 + Math.random() * 0.4);
-                    this.radiusZ = level.targetRadius * (0.8 + Math.random() * 0.4);
-                    this.speed = level.targetSpeed * (0.8 + Math.random() * 0.4);
-                    this.time = Math.random() * 100;
-                }
-            }
-
-            const level = LEVELS[currentLevel];
-            const count = level.targetCount;
-            
-            const positions = [];
-            if (count <= 5) {
-                positions.push([-4, -3], [3.5, -2.5], [-2, -4], [5, -1.5], [0, -5]);
-            } else {
-                positions.push([-4, -3], [3.5, -2.5], [-2, -4], [5, -1.5], [0, -5], [-6, -1], [6, -4]);
-            }
-            
-            for (let i = 0; i < count; i++) {
-                const pos = positions[i % positions.length];
-                targets.push(new MovingTarget(scene, pos[0], pos[1]));
-            }
-        }
-
-        function applyCollision() {
-            const pos = droneGroup.position;
-            let collided = false;
-            let impactForce = 0;
-            const level = LEVELS[currentLevel];
-
-            if (pos.x > CONFIG.LIMIT_X) {
-                impactForce = Math.max(impactForce, Math.abs(state.velocity.x));
-                pos.x = CONFIG.LIMIT_X;
-                state.velocity.x = -Math.abs(state.velocity.x) * CONFIG.BOUNCE_FACTOR;
-                collided = true;
-            }
-            if (pos.x < CONFIG.MIN_X) {
-                impactForce = Math.max(impactForce, Math.abs(state.velocity.x));
-                pos.x = CONFIG.MIN_X;
-                state.velocity.x = Math.abs(state.velocity.x) * CONFIG.BOUNCE_FACTOR;
-                collided = true;
-            }
-            if (pos.z > CONFIG.LIMIT_Z) {
-                impactForce = Math.max(impactForce, Math.abs(state.velocity.z));
-                pos.z = CONFIG.LIMIT_Z;
-                state.velocity.z = -Math.abs(state.velocity.z) * CONFIG.BOUNCE_FACTOR;
-                collided = true;
-            }
-            if (pos.z < CONFIG.MIN_Z) {
-                impactForce = Math.max(impactForce, Math.abs(state.velocity.z));
-                pos.z = CONFIG.MIN_Z;
-                state.velocity.z = Math.abs(state.velocity.z) * CONFIG.BOUNCE_FACTOR;
-                collided = true;
-            }
-
-            if (collided && impactForce > level.collisionThreshold) {
-                triggerCollisionEffect(impactForce);
-            }
-        }
-
-        function triggerCollisionEffect(force) {
-            const flash = document.getElementById('collision-flash');
-            flash.classList.add('active');
-            setTimeout(() => flash.classList.remove('active'), 150);
-
-            const level = LEVELS[currentLevel];
-            if (force >= level.crashThreshold && !state.isCrashed) {
-                state.isCrashed = true;
-                state.verticalVelocity = 0;
-                showNotification("💥 КРУШЕНИЕ! Дрон повреждён. Нажмите 'Перезапуск'", 'hit');
-                SFX.crash();
-                document.getElementById('stability').innerText = '0';
-            } else if (!state.isCrashed) {
-                SFX.collision();
-                showNotification("⚠️ СТОЛКНОВЕНИЕ! Осторожнее!", 'hit');
-            }
-        }
-
-        function handleKeyDown(e) {
-            state.keys[e.key] = true;
-            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
-                e.preventDefault();
-            }
-            if (e.key === ' ') {
-                if (!state.isCrashed && !state.gameCompleted) {
-                    state.pitch = 0;
-                    state.roll = 0;
-                    state.velocity.x *= 0.3;
-                    state.velocity.z *= 0.3;
-                    droneGroup.rotation.x = 0;
-                    droneGroup.rotation.z = 0;
-                    document.getElementById('stability').innerText = '100';
-                    SFX.stabilize();
-                    setTimeout(() => {
-                        if (!state.isCrashed && !state.gameCompleted) {
-                            document.getElementById('stability').innerText = '94';
-                        }
-                    }, 400);
-                }
-            }
-            ensureAudio();
-        }
-
-        function handleKeyUp(e) {
-            state.keys[e.key] = false;
-        }
-
-        function handleMovement() {
-            const level = LEVELS[currentLevel];
-            
-            if (state.isCrashed || state.gameCompleted) {
-                if (state.gameCompleted) return;
-                state.verticalVelocity -= CONFIG.GRAVITY;
-                droneGroup.position.y += state.verticalVelocity;
-                droneGroup.rotation.x += 0.02;
-                droneGroup.rotation.z += 0.03;
-
-                if (droneGroup.position.y <= CONFIG.GROUND_Y) {
-                    droneGroup.position.y = CONFIG.GROUND_Y;
-                    state.verticalVelocity = 0;
-                    state.velocity.x *= 0.9;
-                    state.velocity.z *= 0.9;
-                }
-
-                state.velocity.x *= 0.98;
-                state.velocity.z *= 0.98;
-                droneGroup.position.x += state.velocity.x;
-                droneGroup.position.z += state.velocity.z;
-                applyCollision();
                 return;
             }
 
-            let forward = 0, right = 0;
-            if (state.keys.ArrowUp || state.keys.w || state.keys.W || state.keys['ц'] || state.keys['Ц']) forward = -1;
-            if (state.keys.ArrowDown || state.keys.s || state.keys.S || state.keys['ы'] || state.keys['Ы']) forward = 1;
-            if (state.keys.ArrowLeft || state.keys.a || state.keys.A || state.keys['ф'] || state.keys['Ф']) right = -1;
-            if (state.keys.ArrowRight || state.keys.d || state.keys.D || state.keys['в'] || state.keys['В']) right = 1;
-
-            const targetPitch = forward * level.maxTilt;
-            const targetRoll = right * level.maxTilt;
-
-            state.pitch += (targetPitch - state.pitch) * 0.23;
-            state.roll += (targetRoll - state.roll) * 0.23;
-
-            droneGroup.rotation.x = state.pitch;
-            droneGroup.rotation.z = state.roll;
-
-            state.velocity.x += right * level.droneSpeed * 0.09;
-            state.velocity.z += forward * level.droneSpeed * 0.09;
-
-            state.velocity.x *= level.droneDrag;
-            state.velocity.z *= level.droneDrag;
-
-            droneGroup.position.x += state.velocity.x;
-            droneGroup.position.z += state.velocity.z;
-
-            droneGroup.position.y = CONFIG.DRONE_HOVER_Y + Math.sin(Date.now() * CONFIG.DRONE_HOVER_FREQ) * CONFIG.DRONE_HOVER_AMP;
-
-            applyCollision();
-
-            const stabilityVal = Math.max(0, 100 - (Math.abs(state.pitch) + Math.abs(state.roll)) * 55);
-            lastStabilityValue = Math.floor(stabilityVal);
-            document.getElementById('stability').innerText = lastStabilityValue;
-        }
-
-        const raycaster = new THREE.Raycaster();
-
-        function shootFromCenter() {
-            if (!state.canShoot || state.isCrashed || state.gameCompleted) return;
-
-            // ✅ ИСПРАВЛЕНО: стреляем из центра экрана
-            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-
-            let hitTarget = null;
-            let minDistance = Infinity;
-            for (let t of targets) {
-                if (!t.active) continue;
-                const intersects = raycaster.intersectObject(t.group, true);
-                if (intersects.length > 0 && intersects[0].distance < minDistance) {
-                    minDistance = intersects[0].distance;
-                    hitTarget = t;
+            const LEVELS = {
+                easy: {
+                    name: 'ЛЁГКИЙ',
+                    color: '#48bb78',
+                    droneSpeed: 0.09,
+                    droneDrag: 0.94,
+                    maxTilt: 0.35,
+                    targetCount: 5,
+                    targetSpeed: 0.012,
+                    targetRadius: 2.5,
+                    shootCooldown: 500,
+                    collisionThreshold: 0.08,
+                    crashThreshold: 0.2,
+                    lessonText: '📡 ЗАДАНИЕ: Поразить 5 медленных мишеней'
+                },
+                medium: {
+                    name: 'СРЕДНИЙ',
+                    color: '#ecc94b',
+                    droneSpeed: 0.11,
+                    droneDrag: 0.94,
+                    maxTilt: 0.4,
+                    targetCount: 5,
+                    targetSpeed: 0.018,
+                    targetRadius: 3.5,
+                    shootCooldown: 400,
+                    collisionThreshold: 0.05,
+                    crashThreshold: 0.15,
+                    lessonText: '📡 ЗАДАНИЕ: Поразить 5 движущихся мишеней'
+                },
+                hard: {
+                    name: 'СЛОЖНЫЙ',
+                    color: '#e53e3e',
+                    droneSpeed: 0.14,
+                    droneDrag: 0.95,
+                    maxTilt: 0.5,
+                    targetCount: 7,
+                    targetSpeed: 0.028,
+                    targetRadius: 4.5,
+                    shootCooldown: 300,
+                    collisionThreshold: 0.03,
+                    crashThreshold: 0.1,
+                    lessonText: '📡 ЗАДАНИЕ: Поразить 7 быстрых мишеней!'
                 }
-            }
+            };
 
-            // ✅ ИСПРАВЛЕНО: эффекты у дрона, не у камеры
-            createMuzzleFlash();
-            createSmokeTrail();
-            SFX.shoot();
+            const CONFIG = {
+                DRONE_HOVER_Y: 1.25,
+                DRONE_HOVER_AMP: 0.03,
+                DRONE_HOVER_FREQ: 0.0012,
+                LIMIT_X: 10.2,
+                LIMIT_Z: 8.5,
+                MIN_X: -10.2,
+                MIN_Z: -8.2,
+                GROUND_Y: -0.45,
+                GRAVITY: 0.015,
+                BOUNCE_FACTOR: 0.6,
+                CAMERA_OFFSET: { x: 0, y: 3, z: 8 },
+                CAMERA_LERP: 0.09,
+                LOW_END_CORES: 4,
+                MAX_PIXEL_RATIO: 2,
+                DUST_COUNT_HIGH: 50,
+                DUST_COUNT_LOW: 20,
+                PARTICLE_COUNT_HIGH: 50,
+                PARTICLE_COUNT_LOW: 20,
+                TRAIL_LENGTH: 20
+            };
 
-            if (hitTarget) {
-                if (hitTarget.hit()) {
-                    state.destroyedCount++;
-                    document.getElementById('hits').innerText = state.destroyedCount;
-                    document.getElementById('target-counter').innerText = state.destroyedCount;
+            let currentLevel = null;
 
-                    createExplosion(
-                        hitTarget.group.position.x,
-                        hitTarget.group.position.y + 0.4,
-                        hitTarget.group.position.z
-                    );
-                    createShockwave(
-                        hitTarget.group.position.x,
-                        hitTarget.group.position.y + 0.3,
-                        hitTarget.group.position.z
-                    );
+            const state = {
+                keys: {},
+                pitch: 0,
+                roll: 0,
+                velocity: { x: 0, z: 0 },
+                verticalVelocity: 0,
+                isCrashed: false,
+                destroyedCount: 0,
+                canShoot: true,
+                propAngle: 0,
+                trailIndex: 0,
+                trailTimer: 0,
+                animationId: null,
+                simulatorInitialized: false,
+                gameCompleted: false
+            };
 
-                    SFX.explosion();
-                    setTimeout(() => SFX.hit(), 100);
+            let scene, camera, renderer, droneGroup;
+            let propellers = [];
+            let trailParticles = [];
+            let dustParticles = [];
+            let screens = [];
+            let targets = [];
+            let gridHelper;
+            let isLowEnd = false;
+            let lastStabilityValue = 100;
 
-                    showNotification(`🎯 ПОПАДАНИЕ! ${state.destroyedCount}/${LEVELS[currentLevel].targetCount}`, 'hit');
+            const sharedGeometries = {};
 
-                    const crosshair = document.getElementById('crosshair');
-                    crosshair.classList.add('locked');
-                    setTimeout(() => crosshair.classList.remove('locked'), 300);
+            const levelButtons = document.querySelectorAll('.level-btn');
+            const startBtn = document.getElementById('startBtn');
 
-                    if (state.destroyedCount === LEVELS[currentLevel].targetCount) {
-                        setTimeout(() => {
-                            showVictoryModal();
-                        }, 500);
-                    }
-                }
-            }
-
-            const level = LEVELS[currentLevel];
-            state.canShoot = false;
-            setTimeout(() => { state.canShoot = true; }, level.shootCooldown);
-        }
-
-        function handleClick(event) {
-            if (event.target.tagName === 'BUTTON' || event.target.closest('button')) return;
-            ensureAudio();
-            shootFromCenter();
-        }
-
-        // ✅ ИСПРАВЛЕНО: вспышка у дрона
-        function createMuzzleFlash() {
-            const flashGeo = sharedGeometries.flash;
-            const flashMat = new THREE.MeshBasicMaterial({
-                color: 0xffaa55, transparent: true, opacity: 1
-            });
-            const flashMesh = new THREE.Mesh(flashGeo, flashMat);
-
-            flashMesh.position.copy(droneGroup.position);
-            flashMesh.position.y += 0.3;
-            scene.add(flashMesh);
-
-            const light = new THREE.PointLight(0xffaa55, 3, 8);
-            light.position.copy(flashMesh.position);
-            scene.add(light);
-
-            setTimeout(() => {
-                scene.remove(flashMesh);
-                scene.remove(light);
-                flashMat.dispose();
-            }, 80);
-        }
-
-        // ✅ ИСПРАВЛЕНО: дым у дрона
-        function createSmokeTrail() {
-            const smokeCount = isLowEnd ? 4 : 8;
-            const smokeGeo = sharedGeometries.smoke;
-
-            for (let i = 0; i < smokeCount; i++) {
-                const smokeMat = new THREE.MeshBasicMaterial({
-                    color: 0x888888, transparent: true, opacity: 0.6
+            levelButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    levelButtons.forEach(b => b.classList.remove('selected'));
+                    btn.classList.add('selected');
+                    currentLevel = btn.dataset.level;
+                    startBtn.classList.add('enabled');
+                    ensureAudio();
                 });
-                const smoke = new THREE.Mesh(smokeGeo, smokeMat);
+            });
 
-                smoke.position.copy(droneGroup.position);
-                smoke.position.x += (Math.random() - 0.5) * 0.3;
-                smoke.position.y += 0.3 + (Math.random() - 0.5) * 0.3;
-                smoke.position.z += (Math.random() - 0.5) * 0.3;
-                scene.add(smoke);
-
-                let frame = 0;
-                const animateSmoke = () => {
-                    frame++;
-                    smoke.position.y += 0.02;
-                    smoke.scale.multiplyScalar(1.03);
-                    smoke.material.opacity = 0.6 * (1 - frame / 30);
-
-                    if (frame < 30) {
-                        requestAnimationFrame(animateSmoke);
+            (function setupFavicon() {
+                const img = document.getElementById('logoImg');
+                const fallbackSVG = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+                    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' +
+                    '<rect width="100" height="100" rx="20" fill="#00ccff"/>' +
+                    '<text x="50" y="70" font-size="60" text-anchor="middle" fill="white">🚁</text>' +
+                    '</svg>'
+                );
+                let tried = false;
+                img.onerror = function() {
+                    if (!tried) {
+                        tried = true;
+                        img.src = fallbackSVG;
                     } else {
-                        scene.remove(smoke);
-                        smokeMat.dispose();
+                        img.onerror = null;
                     }
                 };
-                animateSmoke();
+            })();
+
+            function copyPhone() {
+                const phone = document.getElementById('phoneNumber').textContent;
+                const btn = document.getElementById('copyPhoneBtn');
+                if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) {
+                    navigator.clipboard.writeText(phone)
+                        .then(() => showCopySuccess(btn))
+                        .catch(() => fallbackCopy(phone, btn));
+                } else {
+                    fallbackCopy(phone, btn);
+                }
             }
-        }
 
-        function createExplosion(x, y, z) {
-            const particleCount = isLowEnd ? CONFIG.PARTICLE_COUNT_LOW : CONFIG.PARTICLE_COUNT_HIGH;
-            const geometry = new THREE.BufferGeometry();
-            const positions = new Float32Array(particleCount * 3);
-            const velocities = [];
+            function fallbackCopy(text, btn) {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                ta.style.left = '-9999px';
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                try {
+                    document.execCommand('copy');
+                    showCopySuccess(btn);
+                } catch (e) {
+                    alert('Номер для связи: ' + text);
+                }
+                document.body.removeChild(ta);
+            }
 
-            for (let i = 0; i < particleCount; i++) {
-                positions[i * 3] = x;
-                positions[i * 3 + 1] = y;
-                positions[i * 3 + 2] = z;
-                velocities.push({
-                    x: (Math.random() - 0.5) * 0.4,
-                    y: Math.random() * 0.4,
-                    z: (Math.random() - 0.5) * 0.4
+            function showCopySuccess(btn) {
+                btn.classList.add('copied');
+                btn.innerText = '✅ Скопировано!';
+                setTimeout(() => {
+                    btn.classList.remove('copied');
+                    btn.innerText = '📋 Копировать';
+                }, 2000);
+            }
+
+            document.getElementById('copyPhoneBtn').addEventListener('click', copyPhone);
+
+            startBtn.addEventListener('click', startSimulator);
+
+            function startSimulator() {
+                if (!currentLevel) {
+                    showNotification('⚠️ Сначала выберите уровень сложности!', 'info');
+                    return;
+                }
+                const music = document.getElementById('bg-music');
+                music.volume = 0.4;
+                music.play().catch(e => console.log('🎵 Автозапуск музыки заблокирован:', e.message));
+                document.getElementById('intro-page').classList.add('hidden');
+                setTimeout(() => {
+                    document.getElementById('simulator-page').classList.add('active');
+                    if (!state.simulatorInitialized) {
+                        initSimulator();
+                    } else {
+                        fullGameRestart();
+                    }
+                }, 800);
+            }
+
+            function exitToMenu() {
+                document.getElementById('victoryModal').classList.remove('show');
+                document.getElementById('simulator-page').classList.remove('active');
+                setTimeout(() => {
+                    document.getElementById('intro-page').classList.remove('hidden');
+                }, 300);
+                state.gameCompleted = false;
+                state.destroyedCount = 0;
+                state.isCrashed = false;
+                state.velocity = { x: 0, z: 0 };
+                state.verticalVelocity = 0;
+                state.pitch = 0;
+                state.roll = 0;
+                state.canShoot = true;
+                levelButtons.forEach(b => b.classList.remove('selected'));
+                currentLevel = null;
+                startBtn.classList.remove('enabled');
+                const music = document.getElementById('bg-music');
+                music.pause();
+                music.currentTime = 0;
+                showNotification('🏠 Возврат в главное меню', 'info');
+            }
+
+            let audioCtx = null;
+            let audioHintShown = false;
+
+            function ensureAudio() {
+                if (!audioCtx) {
+                    try {
+                        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    } catch (e) {
+                        return false;
+                    }
+                }
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume().catch(() => {});
+                }
+                return true;
+            }
+
+            function playSound(freq, duration, type = 'square', volume = 0.08) {
+                if (!ensureAudio()) return;
+                try {
+                    const now = audioCtx.currentTime;
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = type;
+                    osc.frequency.value = freq;
+                    gain.gain.setValueAtTime(volume, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now);
+                    osc.stop(now + duration);
+                } catch (e) {}
+            }
+
+            const SFX = {
+                shoot: () => {
+                    playSound(800, 0.08, 'square', 0.1);
+                    playSound(400, 0.15, 'sawtooth', 0.05);
+                },
+                hit: () => {
+                    playSound(600, 0.1, 'sine', 0.15);
+                    setTimeout(() => playSound(900, 0.15, 'sine', 0.1), 50);
+                    setTimeout(() => playSound(1200, 0.2, 'sine', 0.08), 100);
+                },
+                explosion: () => {
+                    playSound(100, 0.3, 'sawtooth', 0.2);
+                    playSound(60, 0.4, 'square', 0.15);
+                },
+                collision: () => {
+                    playSound(150, 0.15, 'square', 0.15);
+                    playSound(80, 0.2, 'sawtooth', 0.1);
+                },
+                crash: () => {
+                    playSound(80, 0.5, 'sawtooth', 0.25);
+                    playSound(50, 0.6, 'square', 0.2);
+                    setTimeout(() => playSound(40, 0.4, 'triangle', 0.15), 200);
+                },
+                victory: () => {
+                    playSound(523, 0.15, 'sine', 0.12);
+                    setTimeout(() => playSound(659, 0.15, 'sine', 0.12), 150);
+                    setTimeout(() => playSound(784, 0.15, 'sine', 0.12), 300);
+                    setTimeout(() => playSound(1047, 0.3, 'sine', 0.15), 450);
+                },
+                stabilize: () => playSound(400, 0.1, 'triangle', 0.08)
+            };
+
+            let notifTimeout = null;
+
+            function showNotification(text, type = '') {
+                const n = document.getElementById('notification');
+                n.innerText = text;
+                n.className = 'show ' + type;
+                if (notifTimeout) clearTimeout(notifTimeout);
+                notifTimeout = setTimeout(() => n.className = '', 2000);
+            }
+
+            function showVictoryModal() {
+                if (state.gameCompleted) return;
+                state.gameCompleted = true;
+                const stability = document.getElementById('stability').innerText;
+                const total = LEVELS[currentLevel].targetCount;
+                document.getElementById('victoryHits').innerText = state.destroyedCount;
+                document.getElementById('victoryTotal').innerText = total;
+                document.getElementById('victoryStability').innerText = stability;
+                const modal = document.getElementById('victoryModal');
+                modal.classList.add('show');
+                SFX.victory();
+                showNotification(`✅ УРОВЕНЬ "${LEVELS[currentLevel].name}" ПРОЙДЕН!`, 'success');
+            }
+
+            function resetTrailParticles() {
+                trailParticles.forEach(p => {
+                    p.visible = false;
+                    p.scale.set(1, 1, 1);
+                    if (p.userData) p.userData.life = 0;
                 });
             }
 
-            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-            const particleMat = new THREE.PointsMaterial({
-                color: 0xff7700, size: 0.2,
-                transparent: true, opacity: 1
-            });
-            const particles = new THREE.Points(geometry, particleMat);
-            scene.add(particles);
-
-            let frame = 0;
-            const animateExplosion = () => {
-                frame++;
-                const pos = particles.geometry.attributes.position.array;
-                for (let i = 0; i < particleCount; i++) {
-                    pos[i * 3] += velocities[i].x;
-                    pos[i * 3 + 1] += velocities[i].y - 0.015;
-                    pos[i * 3 + 2] += velocities[i].z;
-                }
-                particles.geometry.attributes.position.needsUpdate = true;
-                particleMat.opacity = 1 - frame / 40;
-
-                if (frame < 40) {
-                    requestAnimationFrame(animateExplosion);
-                } else {
-                    scene.remove(particles);
-                    geometry.dispose();
-                    particleMat.dispose();
-                }
-            };
-            animateExplosion();
-
-            const lightFlash = new THREE.PointLight(0xff5500, 5, 15);
-            lightFlash.position.set(x, y, z);
-            scene.add(lightFlash);
-
-            setTimeout(() => {
-                scene.remove(lightFlash);
-            }, 300);
-        }
-
-        function createShockwave(x, y, z) {
-            const ringGeo = sharedGeometries.ring;
-            const ringMat = new THREE.MeshBasicMaterial({
-                color: 0xffaa00, transparent: true,
-                opacity: 1, side: THREE.DoubleSide
-            });
-            const ring = new THREE.Mesh(ringGeo, ringMat);
-            ring.position.set(x, y, z);
-            ring.rotation.x = -Math.PI / 2;
-            scene.add(ring);
-
-            let frame = 0;
-            const animateRing = () => {
-                frame++;
-                const scale = 1 + frame * 0.3;
-                ring.scale.set(scale, scale, scale);
-                ring.material.opacity = 1 - frame / 25;
-
-                if (frame < 25) {
-                    requestAnimationFrame(animateRing);
-                } else {
-                    scene.remove(ring);
-                    ringMat.dispose();
-                }
-            };
-            animateRing();
-        }
-
-        // ✅ ИСПРАВЛЕНО: камера смотрит вперёд от дрона
-        function updateCamera() {
-            const targetPos = droneGroup.position.clone();
-            const desiredPos = targetPos.clone().add(new THREE.Vector3(
-                CONFIG.CAMERA_OFFSET.x,
-                CONFIG.CAMERA_OFFSET.y,
-                CONFIG.CAMERA_OFFSET.z
-            ));
-            camera.position.lerp(desiredPos, CONFIG.CAMERA_LERP);
-            
-            // Камера смотрит вперёд от дрона, а не на дрон
-            const lookAtPoint = droneGroup.position.clone();
-            lookAtPoint.z -= 5;
-            camera.lookAt(lookAtPoint);
-        }
-
-        function updatePropellers() {
-            state.propAngle += 0.6;
-            propellers.forEach(p => { 
-                p.rotation.y = state.propAngle;
-            });
-        }
-
-        function updateTrail() {
-            state.trailTimer++;
-            if (state.trailTimer > 2) {
+            function fullGameRestart() {
+                document.getElementById('victoryModal').classList.remove('show');
+                state.gameCompleted = false;
+                state.destroyedCount = 0;
+                state.isCrashed = false;
+                state.velocity = { x: 0, z: 0 };
+                state.verticalVelocity = 0;
+                state.pitch = 0;
+                state.roll = 0;
+                state.canShoot = true;
+                state.trailIndex = 0;
                 state.trailTimer = 0;
-                const p = trailParticles[state.trailIndex];
-                p.position.copy(droneGroup.position);
-                p.position.y -= 0.15;
-                p.visible = true;
-                p.scale.set(1, 1, 1);
-                p.userData.life = 30;
-                p.material.opacity = p.userData.baseOpacity;
-                state.trailIndex = (state.trailIndex + 1) % CONFIG.TRAIL_LENGTH;
-            }
 
-            for (let i = 0; i < trailParticles.length; i++) {
-                const p = trailParticles[i];
-                if (p.visible && p.userData.life > 0) {
-                    p.userData.life--;
-                    const t = p.userData.life / 30;
-                    p.material.opacity = p.userData.baseOpacity * t;
-                    p.scale.multiplyScalar(0.97);
+                const total = LEVELS[currentLevel].targetCount;
+                document.getElementById('hits').innerText = '0';
+                document.getElementById('target-counter').innerText = '0';
+                document.getElementById('target-total').innerText = total;
+                document.getElementById('stability').innerText = '100';
+                document.getElementById('levelLabel').innerText = `Уровень: ${LEVELS[currentLevel].name}`;
+                document.getElementById('lessonBadge').innerText = LEVELS[currentLevel].lessonText;
 
-                    if (p.userData.life <= 0) {
-                        p.visible = false;
-                        p.scale.set(1, 1, 1);
-                    }
+                if (droneGroup) {
+                    droneGroup.position.set(0, CONFIG.DRONE_HOVER_Y, 0);
+                    droneGroup.rotation.x = 0;
+                    droneGroup.rotation.y = 0;
+                    droneGroup.rotation.z = 0;
                 }
-            }
-        }
 
-        function updateDust(time) {
-            dustParticles.forEach(dust => {
-                dust.position.y += Math.sin(time * 0.001 + dust.userData.phase) * 0.002;
-                dust.position.x += Math.cos(time * 0.0005 + dust.userData.phase) * 0.001;
+                targets.forEach(t => {
+                    if (t.group && t.group.parent) t.group.parent.remove(t.group);
+                });
+                targets = [];
+                setupTargets();
 
-                if (dust.position.y > 4) dust.position.y = 0;
-                if (dust.position.y < 0) dust.position.y = 4;
-                if (dust.position.x > 10) dust.position.x = -10;
-                if (dust.position.x < -10) dust.position.x = 10;
-            });
-        }
-
-        function updateScreens(time) {
-            if (screens.length > 0 && screens[0].material) {
-                const flicker = 0.6 + Math.sin(time * 0.005) * 0.3;
-                screens[0].material.emissiveIntensity = flicker;
-            }
-        }
-
-        function animate(time) {
-            state.animationId = requestAnimationFrame(animate);
-            handleMovement();
-            targets.forEach(t => { if (t.active) t.update(); });
-            updatePropellers();
-            updateCamera();
-            updateTrail();
-            updateDust(time || 0);
-            updateScreens(time || 0);
-
-            if (gridHelper && gridHelper.material) {
-                gridHelper.material.opacity = 0.5 + Math.sin((time || 0) * 0.002) * 0.15;
+                resetTrailParticles();
+                showNotification(`🔄 Уровень "${LEVELS[currentLevel].name}" перезапущен!`, 'success');
             }
 
-            renderer.render(scene, camera);
-        }
+            function resetExercise() {
+                if (state.gameCompleted) {
+                    fullGameRestart();
+                    return;
+                }
+                state.destroyedCount = 0;
+                state.isCrashed = false;
+                state.velocity = { x: 0, z: 0 };
+                state.verticalVelocity = 0;
+                state.pitch = 0;
+                state.roll = 0;
+                state.canShoot = true;
+                state.trailIndex = 0;
+                state.trailTimer = 0;
 
-        function handleResize() {
-            if (!camera || !renderer) return;
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }
+                document.getElementById('hits').innerText = '0';
+                document.getElementById('target-counter').innerText = '0';
+                document.getElementById('stability').innerText = '100';
 
-        function handleBlur() {
-            state.keys = {};
-        }
+                targets.forEach(t => t.reset());
 
-        function setupEventListeners() {
-            window.addEventListener('keydown', handleKeyDown);
-            window.addEventListener('keyup', handleKeyUp);
-            window.addEventListener('click', handleClick);
-            window.addEventListener('resize', handleResize);
-            window.addEventListener('blur', handleBlur);
-            document.getElementById('resetDroneBtn').addEventListener('click', resetExercise);
-            document.getElementById('fullRestartBtn').addEventListener('click', fullGameRestart);
-            document.getElementById('exitMenuBtn').addEventListener('click', exitToMenu);
-        }
+                droneGroup.position.set(0, CONFIG.DRONE_HOVER_Y, 0);
+                droneGroup.rotation.x = 0;
+                droneGroup.rotation.y = 0;
+                droneGroup.rotation.z = 0;
 
-        window.addEventListener('beforeunload', () => {
-            if (state.animationId) {
-                cancelAnimationFrame(state.animationId);
-            }
-            window.removeEventListener('keydown', handleKeyDown);
-            window.removeEventListener('keyup', handleKeyUp);
-            window.removeEventListener('click', handleClick);
-            window.removeEventListener('resize', handleResize);
-            window.removeEventListener('blur', handleBlur);
-            
-            document.getElementById('resetDroneBtn').removeEventListener('click', resetExercise);
-            document.getElementById('fullRestartBtn').removeEventListener('click', fullGameRestart);
-            document.getElementById('exitMenuBtn').removeEventListener('click', exitToMenu);
-
-            if (audioCtx && audioCtx.state !== 'closed') {
-                try { audioCtx.close(); } catch (e) {}
+                resetTrailParticles();
+                showNotification("🔄 Упражнение перезапущено", 'success');
             }
 
-            if (scene) {
-                scene.traverse(obj => {
-                    if (obj.geometry) obj.geometry.dispose();
-                    if (obj.material) {
-                        if (Array.isArray(obj.material)) {
-                            obj.material.forEach(m => m.dispose());
-                        } else {
-                            obj.material.dispose();
+            function initSimulator() {
+                console.log('🚁 Инициализация тренажёра...');
+                if (typeof THREE === 'undefined') {
+                    console.error('❌ Three.js не загружен!');
+                    document.getElementById('webgl-error').classList.add('show');
+                    return;
+                }
+                if (!checkWebGLSupport()) {
+                    document.getElementById('webgl-error').classList.add('show');
+                    return;
+                }
+
+                sharedGeometries.smoke = new THREE.SphereGeometry(0.12, 6, 6);
+                sharedGeometries.flash = new THREE.SphereGeometry(0.25, 8, 8);
+                sharedGeometries.ring = new THREE.RingGeometry(0.1, 0.2, 32);
+
+                setupScene();
+                setupLights();
+                setupFloor();
+                setupWalls();
+                setupDrone();
+                setupTrail();
+                setupDust();
+                setupTargets();
+                setupEventListeners();
+
+                applyLevelSettings();
+
+                state.simulatorInitialized = true;
+
+                setTimeout(() => {
+                    if (!audioCtx || audioCtx.state === 'suspended') {
+                        if (!audioHintShown) {
+                            showNotification("🎵 Нажмите на экран для активации звука", 'info');
+                            audioHintShown = true;
                         }
                     }
+                }, 1500);
+
+                animate();
+                console.log(`✅ Тренажёр запущен. Уровень: ${LEVELS[currentLevel].name}`);
+            }
+
+            function checkWebGLSupport() {
+                try {
+                    const canvas = document.createElement('canvas');
+                    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                    if (!gl) return false;
+                    return true;
+                } catch (e) {
+                    return false;
+                }
+            }
+
+            function applyLevelSettings() {
+                const level = LEVELS[currentLevel];
+                const total = level.targetCount;
+                document.getElementById('target-total').innerText = total;
+                document.getElementById('levelLabel').innerText = `Уровень: ${level.name}`;
+                document.getElementById('lessonBadge').innerText = level.lessonText;
+                
+                const statsPanel = document.getElementById('stats-panel');
+                statsPanel.style.borderLeftColor = level.color;
+                statsPanel.style.boxShadow = `0 0 20px ${level.color}40`;
+            }
+
+            function setupScene() {
+                scene = new THREE.Scene();
+                scene.background = null;
+                scene.fog = new THREE.FogExp2(0x050b1a, 0.015);
+
+                camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+                camera.position.set(6, 5, 9);
+
+                isLowEnd = (navigator.hardwareConcurrency || 4) < CONFIG.LOW_END_CORES;
+                const pixelRatio = isLowEnd ? 1 : Math.min(window.devicePixelRatio, CONFIG.MAX_PIXEL_RATIO);
+
+                try {
+                    renderer = new THREE.WebGLRenderer({ antialias: !isLowEnd, alpha: true });
+                } catch (e) {
+                    console.error('❌ Не удалось создать WebGL рендерер:', e);
+                    document.getElementById('webgl-error').classList.add('show');
+                    throw e;
+                }
+
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setPixelRatio(pixelRatio);
+                renderer.setClearColor(0x050b1a, 0);
+                renderer.shadowMap.enabled = !isLowEnd;
+                if (!isLowEnd) {
+                    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                }
+                renderer.toneMapping = THREE.ACESFilmicToneMapping;
+                renderer.toneMappingExposure = 1.2;
+
+                const simPage = document.getElementById('simulator-page');
+                simPage.insertBefore(renderer.domElement, simPage.firstChild);
+                renderer.domElement.style.position = 'fixed';
+                renderer.domElement.style.top = '0';
+                renderer.domElement.style.left = '0';
+                renderer.domElement.style.zIndex = '1';
+            }
+
+            function setupLights() {
+                scene.add(new THREE.AmbientLight(0x303050, 0.6));
+
+                const mainLight = new THREE.DirectionalLight(0xffffff, 1.0);
+                mainLight.position.set(5, 12, 6);
+                if (!isLowEnd) {
+                    mainLight.castShadow = true;
+                    mainLight.shadow.mapSize.width = 1024;
+                    mainLight.shadow.mapSize.height = 1024;
+                    mainLight.shadow.camera.near = 0.5;
+                    mainLight.shadow.camera.far = 50;
+                }
+                scene.add(mainLight);
+
+                const blueLight = new THREE.PointLight(0x00ccff, 1.5, 20);
+                blueLight.position.set(-8, 4, -5);
+                scene.add(blueLight);
+
+                const orangeLight = new THREE.PointLight(0xff6600, 1.2, 20);
+                orangeLight.position.set(8, 4, -5);
+                scene.add(orangeLight);
+
+                const greenLight = new THREE.PointLight(0x00ff88, 0.8, 15);
+                greenLight.position.set(0, 3, 5);
+                scene.add(greenLight);
+            }
+
+            function setupFloor() {
+                const floorMat = new THREE.MeshStandardMaterial({
+                    color: 0x1a2a3a, roughness: 0.6, metalness: 0.3
+                });
+                const floorPlane = new THREE.Mesh(new THREE.PlaneGeometry(22, 20), floorMat);
+                floorPlane.rotation.x = -Math.PI / 2;
+                floorPlane.position.y = -0.5;
+                if (!isLowEnd) floorPlane.receiveShadow = true;
+                scene.add(floorPlane);
+
+                gridHelper = new THREE.GridHelper(24, 24, 0x00ccff, 0x003366);
+                gridHelper.position.y = -0.45;
+                gridHelper.material.transparent = true;
+                gridHelper.material.opacity = 0.6;
+                scene.add(gridHelper);
+
+                const gridHelper2 = new THREE.GridHelper(24, 48, 0x0066aa, 0x001133);
+                gridHelper2.position.y = -0.44;
+                gridHelper2.material.transparent = true;
+                gridHelper2.material.opacity = 0.3;
+                scene.add(gridHelper2);
+            }
+
+            function setupWalls() {
+                const wallMat = new THREE.MeshStandardMaterial({
+                    color: 0x2c3e4e, roughness: 0.3, metalness: 0.2,
+                    transparent: true, opacity: 0.75
+                });
+
+                const backWall = new THREE.Mesh(new THREE.BoxGeometry(24, 5, 0.5), wallMat);
+                backWall.position.set(0, 1.8, -9.5);
+                if (!isLowEnd) backWall.receiveShadow = true;
+                scene.add(backWall);
+
+                const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.5, 5, 20), wallMat);
+                leftWall.position.set(-11, 1.8, 0);
+                scene.add(leftWall);
+
+                const rightWall = new THREE.Mesh(new THREE.BoxGeometry(0.5, 5, 20), wallMat);
+                rightWall.position.set(11, 1.8, 0);
+                scene.add(rightWall);
+
+                const frontBar = new THREE.Mesh(new THREE.BoxGeometry(22, 1, 0.8), wallMat);
+                frontBar.position.set(0, 0.2, 9);
+                scene.add(frontBar);
+
+                const screenGeo = new THREE.PlaneGeometry(1.5, 1);
+                const screenMat = new THREE.MeshStandardMaterial({
+                    color: 0x00ccff, emissive: 0x0066aa, emissiveIntensity: 0.8,
+                    transparent: true, opacity: 0.9
+                });
+                for (let i = -3; i <= 3; i += 2) {
+                    const screen = new THREE.Mesh(screenGeo, screenMat);
+                    screen.position.set(i * 1.5, 2.5, -9.2);
+                    scene.add(screen);
+                    screens.push(screen);
+                }
+
+                const metalMat = new THREE.MeshStandardMaterial({
+                    color: 0xaa9977, metalness: 0.9, roughness: 0.2
+                });
+                for (let i = -6; i <= 6; i += 2.5) {
+                    const pillar = new THREE.Mesh(
+                        new THREE.CylinderGeometry(0.2, 0.3, 2.2, 8), metalMat
+                    );
+                    pillar.position.set(i, -0.3, -7);
+                    if (!isLowEnd) pillar.castShadow = true;
+                    scene.add(pillar);
+                }
+            }
+
+            function setupDrone() {
+                droneGroup = new THREE.Group();
+                scene.add(droneGroup);
+                droneGroup.position.set(0, CONFIG.DRONE_HOVER_Y, 0);
+
+                propellers = [];
+
+                const carbonMat = new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.6, metalness: 0.8 });
+                const goldMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.15, metalness: 0.9 });
+                const titaniumMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.3, metalness: 0.7 });
+                const neonPropMat = new THREE.MeshStandardMaterial({ color: 0x00ffcc, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.7 });
+                const plasticMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5, metalness: 0.2 });
+                const lensMat = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.05, metalness: 1.0 });
+                const pcbMat = new THREE.MeshStandardMaterial({ color: 0x0f3d0f, roughness: 0.5, metalness: 0.2 });
+
+                const bottomPlate = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.015, 0.45), carbonMat);
+                bottomPlate.position.y = -0.03;
+                bottomPlate.castShadow = true;
+                droneGroup.add(bottomPlate);
+
+                const topPlate = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.015, 0.35), carbonMat);
+                topPlate.position.y = 0.05;
+                topPlate.castShadow = true;
+                droneGroup.add(topPlate);
+
+                const standoffGeo = new THREE.CylinderGeometry(0.01, 0.01, 0.065, 8);
+                const standoffPositions = [
+                    {x: 0.07, z: 0.15}, {x: -0.07, z: 0.15},
+                    {x: 0.07, z: -0.15}, {x: -0.07, z: -0.15}
+                ];
+                standoffPositions.forEach(pos => {
+                    const pillar = new THREE.Mesh(standoffGeo, titaniumMat);
+                    pillar.position.set(pos.x, 0.01, pos.z);
+                    droneGroup.add(pillar);
+                });
+
+                const pcb = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.01, 0.12), pcbMat);
+                pcb.position.set(0, 0.01, 0);
+                droneGroup.add(pcb);
+                
+                const heatsink = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.015, 0.1), titaniumMat);
+                heatsink.position.set(0, 0.02, 0);
+                droneGroup.add(heatsink);
+
+                const armPositions = [
+                    { x: 0.26, z: 0.26, angle: -Math.PI / 4 },
+                    { x: -0.26, z: 0.26, angle: Math.PI / 4 },
+                    { x: 0.26, z: -0.26, angle: Math.PI / 4 },
+                    { x: -0.26, z: -0.26, angle: -Math.PI / 4 }
+                ];
+
+                armPositions.forEach((pos, index) => {
+                    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.36, 8), carbonMat);
+                    arm.position.set(pos.x / 2, 0.01, pos.z / 2);
+                    arm.rotation.z = Math.PI / 2;
+                    arm.rotation.y = pos.angle;
+                    arm.castShadow = true;
+                    droneGroup.add(arm);
+
+                    const motorGroup = new THREE.Group();
+                    motorGroup.position.set(pos.x, 0.03, pos.z);
+
+                    const motorBase = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.04, 12), titaniumMat);
+                    motorBase.castShadow = true;
+                    motorGroup.add(motorBase);
+
+                    const motorBell = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.042, 0.03, 12), goldMat);
+                    motorBell.position.y = 0.025;
+                    motorBell.castShadow = true;
+                    motorGroup.add(motorBell);
+
+                    droneGroup.add(motorGroup);
+
+                    const guardGeo = new THREE.TorusGeometry(0.15, 0.01, 8, 24);
+                    const guard = new THREE.Mesh(guardGeo, plasticMat);
+                    guard.rotation.x = Math.PI / 2;
+                    guard.position.set(pos.x, 0.06, pos.z);
+                    droneGroup.add(guard);
+
+                    const guardStrut = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.01, 0.02), plasticMat);
+                    guardStrut.position.set(pos.x - (pos.x * 0.15), 0.04, pos.z - (pos.z * 0.15));
+                    guardStrut.rotation.y = pos.angle;
+                    droneGroup.add(guardStrut);
+
+                    const led = new THREE.Mesh(new THREE.SphereGeometry(0.015, 8, 8), new THREE.MeshBasicMaterial({ color: (index < 2) ? 0x00ff00 : 0xff0000 }));
+                    led.position.set(pos.x, -0.02, pos.z);
+                    droneGroup.add(led);
+
+                    const propGroup = new THREE.Group();
+                    propGroup.position.set(pos.x, 0.075, pos.z);
+
+                    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.02, 8), titaniumMat);
+                    propGroup.add(hub);
+                    const nut = new THREE.Mesh(new THREE.ConeGeometry(0.01, 0.015, 6), goldMat);
+                    nut.position.y = 0.015;
+                    propGroup.add(nut);
+
+                    for (let i = 0; i < 3; i++) {
+                        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.006, 0.022), neonPropMat);
+                        blade.position.set(0, 0.005, 0);
+                        blade.geometry.translate(0.06, 0, 0);
+                        blade.rotation.x = 0.15; 
+                        blade.rotation.y = (Math.PI * 2 / 3) * i;
+                        propGroup.add(blade);
+                    }
+
+                    droneGroup.add(propGroup);
+                    propellers.push(propGroup);
+                });
+
+                const cameraGroup = new THREE.Group();
+                cameraGroup.position.set(0, 0.01, 0.22);
+
+                const mountGeo = new THREE.BoxGeometry(0.01, 0.08, 0.08);
+                const leftMount = new THREE.Mesh(mountGeo, titaniumMat);
+                leftMount.position.x = -0.06;
+                const rightMount = leftMount.clone();
+                rightMount.position.x = 0.06;
+                cameraGroup.add(leftMount, rightMount);
+
+                const camBodyGroup = new THREE.Group();
+                camBodyGroup.rotation.x = -0.25;
+
+                const camBody = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.07, 0.07), plasticMat);
+                camBody.castShadow = true;
+                camBodyGroup.add(camBody);
+
+                const lensRing = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.04, 12), titaniumMat);
+                lensRing.rotation.x = Math.PI / 2;
+                lensRing.position.set(0, 0, 0.04);
+                camBodyGroup.add(lensRing);
+
+                const lensGlass = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.005, 12), lensMat);
+                lensGlass.rotation.x = Math.PI / 2;
+                lensGlass.position.set(0, 0, 0.061);
+                camBodyGroup.add(lensGlass);
+
+                cameraGroup.add(camBodyGroup);
+                droneGroup.add(cameraGroup);
+
+                const battery = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.06, 0.18), plasticMat);
+                battery.position.set(0, 0.09, -0.05);
+                battery.castShadow = true;
+                droneGroup.add(battery);
+
+                const strap = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.062, 0.04), new THREE.MeshStandardMaterial({ color: 0xddaa00, roughness: 0.9 }));
+                strap.position.set(0, 0.09, -0.05);
+                droneGroup.add(strap);
+
+                const antennaGroup = new THREE.Group();
+                antennaGroup.position.set(0, 0.06, -0.2);
+
+                const antennaCable = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.12, 6), titaniumMat);
+                antennaCable.rotation.x = -Math.PI / 4;
+                antennaCable.position.set(0, 0.04, -0.04);
+                antennaGroup.add(antennaCable);
+
+                const antennaHead = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.025, 10), plasticMat);
+                antennaHead.position.set(0, 0.08, -0.08);
+                antennaGroup.add(antennaHead);
+
+                droneGroup.add(antennaGroup);
+
+                const footGeo = new THREE.BoxGeometry(0.03, 0.05, 0.03);
+                armPositions.forEach(pos => {
+                    const foot = new THREE.Mesh(footGeo, plasticMat);
+                    foot.position.set(pos.x, -0.015, pos.z);
+                    droneGroup.add(foot);
+                });
+
+                const droneLight = new THREE.PointLight(0x00ccff, 1.5, 4);
+                droneLight.position.set(0, -0.03, 0);
+                droneGroup.add(droneLight);
+            }
+
+            function setupTrail() {
+                for (let i = 0; i < CONFIG.TRAIL_LENGTH; i++) {
+                    const particle = new THREE.Mesh(
+                        new THREE.SphereGeometry(0.08 * (1 - i / CONFIG.TRAIL_LENGTH), 6, 6),
+                        new THREE.MeshBasicMaterial({
+                            color: 0x00ffff,
+                            transparent: true,
+                            opacity: 0.5 * (1 - i / CONFIG.TRAIL_LENGTH)
+                        })
+                    );
+                    particle.visible = false;
+                    particle.userData.life = 0;
+                    particle.userData.baseOpacity = 0.5 * (1 - i / CONFIG.TRAIL_LENGTH);
+                    scene.add(particle);
+                    trailParticles.push(particle);
+                }
+            }
+
+            function setupDust() {
+                const dustCount = isLowEnd ? CONFIG.DUST_COUNT_LOW : CONFIG.DUST_COUNT_HIGH;
+                const dustGeo = new THREE.SphereGeometry(0.03, 4, 4);
+                const dustMat = new THREE.MeshBasicMaterial({
+                    color: 0x88aaff, transparent: true, opacity: 0.4
+                });
+                for (let i = 0; i < dustCount; i++) {
+                    const dust = new THREE.Mesh(dustGeo, dustMat);
+                    dust.position.set(
+                        (Math.random() - 0.5) * 20,
+                        Math.random() * 4,
+                        (Math.random() - 0.5) * 18
+                    );
+                    dust.userData = {
+                        speed: 0.002 + Math.random() * 0.003,
+                        phase: Math.random() * Math.PI * 2
+                    };
+                    scene.add(dust);
+                    dustParticles.push(dust);
+                }
+            }
+
+            function setupTargets() {
+                class MovingTarget {
+                    constructor(scene, x, z) {
+                        this.group = new THREE.Group();
+                        this.startX = x;
+                        this.startZ = z;
+                        this.active = false;
+                        this.time = 0;
+                        this.angleX = 0;
+                        this.angleZ = 0;
+                        this.radiusX = 0;
+                        this.radiusZ = 0;
+                        this.speed = 0;
+
+                        const base = new THREE.Mesh(
+                            new THREE.CylinderGeometry(0.7, 0.8, 0.3, 20),
+                            new THREE.MeshStandardMaterial({
+                                color: 0xdd3333, emissive: 0x331100,
+                                metalness: 0.5, roughness: 0.4
+                            })
+                        );
+                        if (!isLowEnd) base.castShadow = true;
+                        this.group.add(base);
+
+                        this.middleRing = new THREE.Mesh(
+                            new THREE.TorusGeometry(0.45, 0.05, 8, 24),
+                            new THREE.MeshStandardMaterial({
+                                color: 0xffaa44, emissive: 0x664400,
+                                emissiveIntensity: 0.8
+                            })
+                        );
+                        this.middleRing.rotation.x = Math.PI / 2;
+                        this.middleRing.position.y = 0.2;
+                        this.group.add(this.middleRing);
+
+                        this.bullseye = new THREE.Mesh(
+                            new THREE.CylinderGeometry(0.18, 0.18, 0.32, 16),
+                            new THREE.MeshStandardMaterial({
+                                color: 0xffff00, emissive: 0x886600,
+                                emissiveIntensity: 1.2
+                            })
+                        );
+                        this.bullseye.position.y = 0.18;
+                        this.group.add(this.bullseye);
+
+                        this.glow = new THREE.Mesh(
+                            new THREE.RingGeometry(0.75, 0.9, 32),
+                            new THREE.MeshBasicMaterial({
+                                color: 0xff5500, transparent: true,
+                                opacity: 0.5, side: THREE.DoubleSide
+                            })
+                        );
+                        this.glow.rotation.x = -Math.PI / 2;
+                        this.glow.position.y = 0.05;
+                        this.group.add(this.glow);
+
+                        this.light = new THREE.PointLight(0xff5500, 0.8, 3);
+                        this.light.position.y = 0.5;
+                        this.group.add(this.light);
+
+                        this.group.position.set(x, CONFIG.DRONE_HOVER_Y, z);
+                        scene.add(this.group);
+                        this.reset();
+                    }
+
+                    update() {
+                        if (!this.active) return;
+                        this.time += 0.05;
+                        this.angleX += this.speed;
+                        this.angleZ += this.speed * 0.7;
+
+                        const newX = this.startX + Math.sin(this.angleX) * this.radiusX;
+                        const newZ = this.startZ + Math.cos(this.angleZ) * this.radiusZ;
+
+                        this.group.position.x = Math.min(9.5, Math.max(-9.5, newX));
+                        this.group.position.z = Math.min(7.5, Math.max(-8, newZ));
+                        this.group.position.y = CONFIG.DRONE_HOVER_Y + Math.sin(this.time * 0.5) * 0.3;
+
+                        this.middleRing.rotation.z += 0.05;
+                        this.bullseye.scale.setScalar(1 + Math.sin(this.time) * 0.1);
+                        this.glow.rotation.z += 0.02;
+                        this.glow.material.opacity = 0.3 + Math.sin(this.time * 2) * 0.2;
+                        this.light.intensity = 0.6 + Math.sin(this.time * 3) * 0.3;
+                    }
+
+                    hit() {
+                        if (!this.active) return false;
+                        this.active = false;
+                        this.group.visible = false;
+                        return true;
+                    }
+
+                    reset() {
+                        this.active = true;
+                        this.group.visible = true;
+                        this.group.position.set(this.startX, CONFIG.DRONE_HOVER_Y, this.startZ);
+                        this.angleX = Math.random() * Math.PI * 2;
+                        this.angleZ = Math.random() * Math.PI * 2;
+                        const level = LEVELS[currentLevel];
+                        this.radiusX = level.targetRadius * (0.8 + Math.random() * 0.4);
+                        this.radiusZ = level.targetRadius * (0.8 + Math.random() * 0.4);
+                        this.speed = level.targetSpeed * (0.8 + Math.random() * 0.4);
+                        this.time = Math.random() * 100;
+                    }
+                }
+
+                const level = LEVELS[currentLevel];
+                const count = level.targetCount;
+                
+                const positions = [];
+                if (count <= 5) {
+                    positions.push([-4, -3], [3.5, -2.5], [-2, -4], [5, -1.5], [0, -5]);
+                } else {
+                    positions.push([-4, -3], [3.5, -2.5], [-2, -4], [5, -1.5], [0, -5], [-6, -1], [6, -4]);
+                }
+                
+                for (let i = 0; i < count; i++) {
+                    const pos = positions[i % positions.length];
+                    targets.push(new MovingTarget(scene, pos[0], pos[1]));
+                }
+            }
+
+            function applyCollision() {
+                const pos = droneGroup.position;
+                let collided = false;
+                let impactForce = 0;
+                const level = LEVELS[currentLevel];
+
+                if (pos.x > CONFIG.LIMIT_X) {
+                    impactForce = Math.max(impactForce, Math.abs(state.velocity.x));
+                    pos.x = CONFIG.LIMIT_X;
+                    state.velocity.x = -Math.abs(state.velocity.x) * CONFIG.BOUNCE_FACTOR;
+                    collided = true;
+                }
+                if (pos.x < CONFIG.MIN_X) {
+                    impactForce = Math.max(impactForce, Math.abs(state.velocity.x));
+                    pos.x = CONFIG.MIN_X;
+                    state.velocity.x = Math.abs(state.velocity.x) * CONFIG.BOUNCE_FACTOR;
+                    collided = true;
+                }
+                if (pos.z > CONFIG.LIMIT_Z) {
+                    impactForce = Math.max(impactForce, Math.abs(state.velocity.z));
+                    pos.z = CONFIG.LIMIT_Z;
+                    state.velocity.z = -Math.abs(state.velocity.z) * CONFIG.BOUNCE_FACTOR;
+                    collided = true;
+                }
+                if (pos.z < CONFIG.MIN_Z) {
+                    impactForce = Math.max(impactForce, Math.abs(state.velocity.z));
+                    pos.z = CONFIG.MIN_Z;
+                    state.velocity.z = Math.abs(state.velocity.z) * CONFIG.BOUNCE_FACTOR;
+                    collided = true;
+                }
+
+                if (collided && impactForce > level.collisionThreshold) {
+                    triggerCollisionEffect(impactForce);
+                }
+            }
+
+            function triggerCollisionEffect(force) {
+                const flash = document.getElementById('collision-flash');
+                flash.classList.add('active');
+                setTimeout(() => flash.classList.remove('active'), 150);
+
+                const level = LEVELS[currentLevel];
+                if (force >= level.crashThreshold && !state.isCrashed) {
+                    state.isCrashed = true;
+                    state.verticalVelocity = 0;
+                    showNotification("💥 КРУШЕНИЕ! Дрон повреждён. Нажмите 'Перезапуск'", 'hit');
+                    SFX.crash();
+                    document.getElementById('stability').innerText = '0';
+                } else if (!state.isCrashed) {
+                    SFX.collision();
+                    showNotification("⚠️ СТОЛКНОВЕНИЕ! Осторожнее!", 'hit');
+                }
+            }
+
+            function handleKeyDown(e) {
+                state.keys[e.key] = true;
+                if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
+                    e.preventDefault();
+                }
+                if (e.key === ' ') {
+                    if (!state.isCrashed && !state.gameCompleted) {
+                        state.pitch = 0;
+                        state.roll = 0;
+                        state.velocity.x *= 0.3;
+                        state.velocity.z *= 0.3;
+                        droneGroup.rotation.x = 0;
+                        droneGroup.rotation.z = 0;
+                        document.getElementById('stability').innerText = '100';
+                        SFX.stabilize();
+                        setTimeout(() => {
+                            if (!state.isCrashed && !state.gameCompleted) {
+                                document.getElementById('stability').innerText = '94';
+                            }
+                        }, 400);
+                    }
+                }
+                ensureAudio();
+            }
+
+            function handleKeyUp(e) {
+                state.keys[e.key] = false;
+            }
+
+            function handleMovement() {
+                const level = LEVELS[currentLevel];
+                
+                if (state.isCrashed || state.gameCompleted) {
+                    if (state.gameCompleted) return;
+                    state.verticalVelocity -= CONFIG.GRAVITY;
+                    droneGroup.position.y += state.verticalVelocity;
+                    droneGroup.rotation.x += 0.02;
+                    droneGroup.rotation.z += 0.03;
+
+                    if (droneGroup.position.y <= CONFIG.GROUND_Y) {
+                        droneGroup.position.y = CONFIG.GROUND_Y;
+                        state.verticalVelocity = 0;
+                        state.velocity.x *= 0.9;
+                        state.velocity.z *= 0.9;
+                    }
+
+                    state.velocity.x *= 0.98;
+                    state.velocity.z *= 0.98;
+                    droneGroup.position.x += state.velocity.x;
+                    droneGroup.position.z += state.velocity.z;
+                    applyCollision();
+                    return;
+                }
+
+                let forward = 0, right = 0;
+                if (state.keys.ArrowUp || state.keys.w || state.keys.W || state.keys['ц'] || state.keys['Ц']) forward = -1;
+                if (state.keys.ArrowDown || state.keys.s || state.keys.S || state.keys['ы'] || state.keys['Ы']) forward = 1;
+                if (state.keys.ArrowLeft || state.keys.a || state.keys.A || state.keys['ф'] || state.keys['Ф']) right = -1;
+                if (state.keys.ArrowRight || state.keys.d || state.keys.D || state.keys['в'] || state.keys['В']) right = 1;
+
+                const targetPitch = forward * level.maxTilt;
+                const targetRoll = right * level.maxTilt;
+
+                state.pitch += (targetPitch - state.pitch) * 0.23;
+                state.roll += (targetRoll - state.roll) * 0.23;
+
+                droneGroup.rotation.x = state.pitch;
+                droneGroup.rotation.z = state.roll;
+
+                state.velocity.x += right * level.droneSpeed * 0.09;
+                state.velocity.z += forward * level.droneSpeed * 0.09;
+
+                state.velocity.x *= level.droneDrag;
+                state.velocity.z *= level.droneDrag;
+
+                droneGroup.position.x += state.velocity.x;
+                droneGroup.position.z += state.velocity.z;
+
+                droneGroup.position.y = CONFIG.DRONE_HOVER_Y + Math.sin(Date.now() * CONFIG.DRONE_HOVER_FREQ) * CONFIG.DRONE_HOVER_AMP;
+
+                applyCollision();
+
+                const stabilityVal = Math.max(0, 100 - (Math.abs(state.pitch) + Math.abs(state.roll)) * 55);
+                lastStabilityValue = Math.floor(stabilityVal);
+                document.getElementById('stability').innerText = lastStabilityValue;
+            }
+
+            const raycaster = new THREE.Raycaster();
+
+            function shootFromCenter() {
+                if (!state.canShoot || state.isCrashed || state.gameCompleted) return;
+
+                raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+
+                let hitTarget = null;
+                let minDistance = Infinity;
+                for (let t of targets) {
+                    if (!t.active) continue;
+                    const intersects = raycaster.intersectObject(t.group, true);
+                    if (intersects.length > 0 && intersects[0].distance < minDistance) {
+                        minDistance = intersects[0].distance;
+                        hitTarget = t;
+                    }
+                }
+
+                createMuzzleFlash();
+                createSmokeTrail();
+                SFX.shoot();
+
+                if (hitTarget) {
+                    if (hitTarget.hit()) {
+                        state.destroyedCount++;
+                        document.getElementById('hits').innerText = state.destroyedCount;
+                        document.getElementById('target-counter').innerText = state.destroyedCount;
+
+                        createExplosion(
+                            hitTarget.group.position.x,
+                            hitTarget.group.position.y + 0.4,
+                            hitTarget.group.position.z
+                        );
+                        createShockwave(
+                            hitTarget.group.position.x,
+                            hitTarget.group.position.y + 0.3,
+                            hitTarget.group.position.z
+                        );
+
+                        SFX.explosion();
+                        setTimeout(() => SFX.hit(), 100);
+
+                        showNotification(`🎯 ПОПАДАНИЕ! ${state.destroyedCount}/${LEVELS[currentLevel].targetCount}`, 'hit');
+
+                        const crosshair = document.getElementById('crosshair');
+                        crosshair.classList.add('locked');
+                        setTimeout(() => crosshair.classList.remove('locked'), 300);
+
+                        if (state.destroyedCount === LEVELS[currentLevel].targetCount) {
+                            setTimeout(() => {
+                                showVictoryModal();
+                            }, 500);
+                        }
+                    }
+                }
+
+                const level = LEVELS[currentLevel];
+                state.canShoot = false;
+                setTimeout(() => { state.canShoot = true; }, level.shootCooldown);
+            }
+
+            function handleClick(event) {
+                if (event.target.tagName === 'BUTTON' || event.target.closest('button')) return;
+                ensureAudio();
+                shootFromCenter();
+            }
+
+            function createMuzzleFlash() {
+                const flashGeo = sharedGeometries.flash;
+                const flashMat = new THREE.MeshBasicMaterial({
+                    color: 0xffaa55, transparent: true, opacity: 1
+                });
+                const flashMesh = new THREE.Mesh(flashGeo, flashMat);
+
+                flashMesh.position.copy(droneGroup.position);
+                flashMesh.position.y += 0.3;
+                scene.add(flashMesh);
+
+                const light = new THREE.PointLight(0xffaa55, 3, 8);
+                light.position.copy(flashMesh.position);
+                scene.add(light);
+
+                setTimeout(() => {
+                    scene.remove(flashMesh);
+                    scene.remove(light);
+                    flashMat.dispose();
+                }, 80);
+            }
+
+            function createSmokeTrail() {
+                const smokeCount = isLowEnd ? 4 : 8;
+                const smokeGeo = sharedGeometries.smoke;
+
+                for (let i = 0; i < smokeCount; i++) {
+                    const smokeMat = new THREE.MeshBasicMaterial({
+                        color: 0x888888, transparent: true, opacity: 0.6
+                    });
+                    const smoke = new THREE.Mesh(smokeGeo, smokeMat);
+
+                    smoke.position.copy(droneGroup.position);
+                    smoke.position.x += (Math.random() - 0.5) * 0.3;
+                    smoke.position.y += 0.3 + (Math.random() - 0.5) * 0.3;
+                    smoke.position.z += (Math.random() - 0.5) * 0.3;
+                    scene.add(smoke);
+
+                    let frame = 0;
+                    const animateSmoke = () => {
+                        frame++;
+                        smoke.position.y += 0.02;
+                        smoke.scale.multiplyScalar(1.03);
+                        smoke.material.opacity = 0.6 * (1 - frame / 30);
+
+                        if (frame < 30) {
+                            requestAnimationFrame(animateSmoke);
+                        } else {
+                            scene.remove(smoke);
+                            smokeMat.dispose();
+                        }
+                    };
+                    animateSmoke();
+                }
+            }
+
+            function createExplosion(x, y, z) {
+                const particleCount = isLowEnd ? CONFIG.PARTICLE_COUNT_LOW : CONFIG.PARTICLE_COUNT_HIGH;
+                const geometry = new THREE.BufferGeometry();
+                const positions = new Float32Array(particleCount * 3);
+                const velocities = [];
+
+                for (let i = 0; i < particleCount; i++) {
+                    positions[i * 3] = x;
+                    positions[i * 3 + 1] = y;
+                    positions[i * 3 + 2] = z;
+                    velocities.push({
+                        x: (Math.random() - 0.5) * 0.4,
+                        y: Math.random() * 0.4,
+                        z: (Math.random() - 0.5) * 0.4
+                    });
+                }
+
+                geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+                const particleMat = new THREE.PointsMaterial({
+                    color: 0xff7700, size: 0.2,
+                    transparent: true, opacity: 1
+                });
+                const particles = new THREE.Points(geometry, particleMat);
+                scene.add(particles);
+
+                let frame = 0;
+                const animateExplosion = () => {
+                    frame++;
+                    const pos = particles.geometry.attributes.position.array;
+                    for (let i = 0; i < particleCount; i++) {
+                        pos[i * 3] += velocities[i].x;
+                        pos[i * 3 + 1] += velocities[i].y - 0.015;
+                        pos[i * 3 + 2] += velocities[i].z;
+                    }
+                    particles.geometry.attributes.position.needsUpdate = true;
+                    particleMat.opacity = 1 - frame / 40;
+
+                    if (frame < 40) {
+                        requestAnimationFrame(animateExplosion);
+                    } else {
+                        scene.remove(particles);
+                        geometry.dispose();
+                        particleMat.dispose();
+                    }
+                };
+                animateExplosion();
+
+                const lightFlash = new THREE.PointLight(0xff5500, 5, 15);
+                lightFlash.position.set(x, y, z);
+                scene.add(lightFlash);
+
+                setTimeout(() => {
+                    scene.remove(lightFlash);
+                }, 300);
+            }
+
+            function createShockwave(x, y, z) {
+                const ringGeo = sharedGeometries.ring;
+                const ringMat = new THREE.MeshBasicMaterial({
+                    color: 0xffaa00, transparent: true,
+                    opacity: 1, side: THREE.DoubleSide
+                });
+                const ring = new THREE.Mesh(ringGeo, ringMat);
+                ring.position.set(x, y, z);
+                ring.rotation.x = -Math.PI / 2;
+                scene.add(ring);
+
+                let frame = 0;
+                const animateRing = () => {
+                    frame++;
+                    const scale = 1 + frame * 0.3;
+                    ring.scale.set(scale, scale, scale);
+                    ring.material.opacity = 1 - frame / 25;
+
+                    if (frame < 25) {
+                        requestAnimationFrame(animateRing);
+                    } else {
+                        scene.remove(ring);
+                        ringMat.dispose();
+                    }
+                };
+                animateRing();
+            }
+
+            function updateCamera() {
+                const targetPos = droneGroup.position.clone();
+                const desiredPos = targetPos.clone().add(new THREE.Vector3(
+                    CONFIG.CAMERA_OFFSET.x,
+                    CONFIG.CAMERA_OFFSET.y,
+                    CONFIG.CAMERA_OFFSET.z
+                ));
+                camera.position.lerp(desiredPos, CONFIG.CAMERA_LERP);
+                
+                const lookAtPoint = droneGroup.position.clone();
+                lookAtPoint.z -= 5;
+                camera.lookAt(lookAtPoint);
+            }
+
+            function updatePropellers() {
+                state.propAngle += 0.6;
+                propellers.forEach(p => { 
+                    p.rotation.y = state.propAngle;
                 });
             }
 
-            Object.values(sharedGeometries).forEach(g => g && g.dispose());
+            function updateTrail() {
+                state.trailTimer++;
+                if (state.trailTimer > 2) {
+                    state.trailTimer = 0;
+                    const p = trailParticles[state.trailIndex];
+                    p.position.copy(droneGroup.position);
+                    p.position.y -= 0.15;
+                    p.visible = true;
+                    p.scale.set(1, 1, 1);
+                    p.userData.life = 30;
+                    p.material.opacity = p.userData.baseOpacity;
+                    state.trailIndex = (state.trailIndex + 1) % CONFIG.TRAIL_LENGTH;
+                }
 
-            if (renderer) {
-                renderer.dispose();
+                for (let i = 0; i < trailParticles.length; i++) {
+                    const p = trailParticles[i];
+                    if (p.visible && p.userData.life > 0) {
+                        p.userData.life--;
+                        const t = p.userData.life / 30;
+                        p.material.opacity = p.userData.baseOpacity * t;
+                        p.scale.multiplyScalar(0.97);
+
+                        if (p.userData.life <= 0) {
+                            p.visible = false;
+                            p.scale.set(1, 1, 1);
+                        }
+                    }
+                }
             }
-        });
+
+            function updateDust(time) {
+                dustParticles.forEach(dust => {
+                    dust.position.y += Math.sin(time * 0.001 + dust.userData.phase) * 0.002;
+                    dust.position.x += Math.cos(time * 0.0005 + dust.userData.phase) * 0.001;
+
+                    if (dust.position.y > 4) dust.position.y = 0;
+                    if (dust.position.y < 0) dust.position.y = 4;
+                    if (dust.position.x > 10) dust.position.x = -10;
+                    if (dust.position.x < -10) dust.position.x = 10;
+                });
+            }
+
+            function updateScreens(time) {
+                if (screens.length > 0 && screens[0].material) {
+                    const flicker = 0.6 + Math.sin(time * 0.005) * 0.3;
+                    screens[0].material.emissiveIntensity = flicker;
+                }
+            }
+
+            function animate(time) {
+                state.animationId = requestAnimationFrame(animate);
+                handleMovement();
+                targets.forEach(t => { if (t.active) t.update(); });
+                updatePropellers();
+                updateCamera();
+                updateTrail();
+                updateDust(time || 0);
+                updateScreens(time || 0);
+
+                if (gridHelper && gridHelper.material) {
+                    gridHelper.material.opacity = 0.5 + Math.sin((time || 0) * 0.002) * 0.15;
+                }
+
+                renderer.render(scene, camera);
+            }
+
+            function handleResize() {
+                if (!camera || !renderer) return;
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+
+            function handleBlur() {
+                state.keys = {};
+            }
+
+            function setupEventListeners() {
+                window.addEventListener('keydown', handleKeyDown);
+                window.addEventListener('keyup', handleKeyUp);
+                window.addEventListener('click', handleClick);
+                window.addEventListener('resize', handleResize);
+                window.addEventListener('blur', handleBlur);
+                document.getElementById('resetDroneBtn').addEventListener('click', resetExercise);
+                document.getElementById('fullRestartBtn').addEventListener('click', fullGameRestart);
+                document.getElementById('exitMenuBtn').addEventListener('click', exitToMenu);
+            }
+
+            window.addEventListener('beforeunload', () => {
+                if (state.animationId) {
+                    cancelAnimationFrame(state.animationId);
+                }
+                window.removeEventListener('keydown', handleKeyDown);
+                window.removeEventListener('keyup', handleKeyUp);
+                window.removeEventListener('click', handleClick);
+                window.removeEventListener('resize', handleResize);
+                window.removeEventListener('blur', handleBlur);
+                
+                document.getElementById('resetDroneBtn').removeEventListener('click', resetExercise);
+                document.getElementById('fullRestartBtn').removeEventListener('click', fullGameRestart);
+                document.getElementById('exitMenuBtn').removeEventListener('click', exitToMenu);
+
+                if (audioCtx && audioCtx.state !== 'closed') {
+                    try { audioCtx.close(); } catch (e) {}
+                }
+
+                if (scene) {
+                    scene.traverse(obj => {
+                        if (obj.geometry) obj.geometry.dispose();
+                        if (obj.material) {
+                            if (Array.isArray(obj.material)) {
+                                obj.material.forEach(m => m.dispose());
+                            } else {
+                                obj.material.dispose();
+                            }
+                        }
+                    });
+                }
+
+                Object.values(sharedGeometries).forEach(g => g && g.dispose());
+
+                if (renderer) {
+                    renderer.dispose();
+                }
+            });
+        })();
     </script>
 </body>
 </html>
